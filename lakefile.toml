@@ -1,0 +1,10 @@
+name = "leanio"
+version = "0.1.0"
+defaultTargets = ["leanio"]
+
+[[lean_lib]]
+name = "Leanio"
+
+[[lean_exe]]
+name = "leanio"
+root = "Main"
