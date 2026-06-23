@@ -8,3 +8,10 @@ name = "Leanio"
 [[lean_exe]]
 name = "leanio"
 root = "Main"
+
+[[lean_lib]]
+name = "Tests"
+
+[[lean_exe]]
+name = "test"
+root = "Tests"
