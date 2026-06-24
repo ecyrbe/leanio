@@ -78,6 +78,18 @@ structure Router where
   routers     : List (String × Router) := []
   middlewares : List (HandlerSig → HandlerSig) := []
 
+def Router.empty : Router :=
+  { routes := [], routers := [], middlewares := [] }
+
+def Router.addRoute (route : Route) (r : Router) : Router :=
+  { r with routes := r.routes ++ [route] }
+
+def Router.addRouter (pre : String) (sub : Router) (r : Router) : Router :=
+  { r with routers := r.routers ++ [(pre, sub)] }
+
+def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router :=
+  { r with middlewares := r.middlewares ++ [mw] }
+
 def applyMiddlewares (ms : List (HandlerSig → HandlerSig)) (h : HandlerSig) : HandlerSig :=
   ms.foldl (fun h mw => mw h) h
 
@@ -121,6 +133,33 @@ def loggingMiddleware (next : HandlerSig) : HandlerSig := fun req => do
   IO.println s!"← {status} ({Utils.formatNanos (end_ - start)})"
   return res
 
+-- ==========================================
+-- State injection via Extensions
+-- ==========================================
+
+/--
+Creates a middleware that injects `state` into every request's extensions.
+Use with a wrapper struct that derives `TypeName`:
+
+```lean4
+structure MyState where
+  ref : IO.Ref AppState
+deriving TypeName
+
+let ref ← IO.mkRef initialState
+Router.addMiddleware (withState MyState { ref := ref }) router
+```
+-/
+def withState (α : Type) [TypeName α] (state : α) (next : HandlerSig) : HandlerSig := fun req =>
+  next { req with extensions := req.extensions.insert state }
+
+/--
+Extracts a value of type `α` from request extensions.
+Returns `none` if no middleware injected the value.
+-/
+def getState (α : Type) [TypeName α] (req : Request Body.Stream) : Option α :=
+  req.extensions.get α
+
 instance : Handler Router where
   onRequest := dispatch
 
@@ -137,21 +176,64 @@ private def parseParam [FromRouteParam α] (v : String)
 open Lean
 open Lean.Macro
 
-partial def extractParamNames (s : String) : List String :=
-  go s.toList []
-where
-  go : List Char → List String → List String
-    | [], acc => acc.reverse
-    | '{' :: rest, acc =>
-      let (name, after) := rest.span (· ≠ '}')
-      go after.tail (String.ofList name :: acc)
-    | _ :: rest, acc => go rest acc
+def isValidParamName (s : String) : Bool :=
+  if s.isEmpty then false
+  else
+    let first := s.front
+    (first.isAlpha || first == '_') && s.all fun c => c.isAlphanum || c == '_'
+
+/-- Validates route pattern structure: balanced braces and valid param names. -/
+def validateRoutePattern (s : String) : Except String Unit :=
+  Id.run do
+    let mut chars := s.toList
+    while !chars.isEmpty do
+      match chars with
+      | '{' :: rest =>
+        let (nameChars, after) := rest.span (· ≠ '}')
+        if after.isEmpty then
+          return Except.error "unclosed brace in pattern"
+        let name := String.ofList nameChars
+        unless isValidParamName name do
+          return Except.error s!"invalid path parameter name '{name}'"
+        chars := after.tail
+      | _ :: rest => chars := rest
+      | [] => chars := []
+    return Except.ok ()
+
+/-- Returns (paramName, byteOffsetInString) for each {...} segment.
+Assumes the pattern is already validated. -/
+def extractParamNames (s : String) : List (String × Nat) :=
+  Id.run do
+    let mut chars := s.toList
+    let mut acc : List (String × Nat) := []
+    let mut idx : Nat := 0
+    while !chars.isEmpty do
+      match chars with
+      | '{' :: rest =>
+        let (nameChars, after) := rest.span (· ≠ '}')
+        let name := String.ofList nameChars
+        acc := (name, idx) :: acc
+        idx := idx + 1 + nameChars.length + 1  -- '{' + name + '}'
+        chars := after.tail
+      | _ :: rest =>
+        idx := idx + 1
+        chars := rest
+      | [] => chars := []
+    return acc.reverse
 
 syntax parenBinder := "(" ident ":" term ")"
 
 private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyntax `ident)
     (bs : Array Syntax) (body : TSyntax `term) : MacroM Command := do
-  let paramNames := extractParamNames pat.getString
+  let patStr := pat.getString
+
+  -- validate pattern structure and param names
+  match validateRoutePattern patStr with
+  | .error e => Macro.throwErrorAt pat e
+  | .ok () => pure ()
+
+  let paramEntries := extractParamNames patStr
+  let paramNames := paramEntries.map (·.1)
   let n := paramNames.length
   let methodTerm := mkIdent methodName
 
@@ -167,7 +249,7 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
         `(fun ($reqId : $reqTy) => $body)
       else
         if paramBinders.length ≠ n then
-          Macro.throwError s!"handler has {paramBinders.length} parameter(s) but pattern has {n} path parameter(s)"
+          Macro.throwErrorAt pat s!"handler has {paramBinders.length} parameter(s) but pattern has {n} path parameter(s)"
 
         -- validate that binder names match path parameter names
         for (expected, b) in List.zip paramNames paramBinders do
@@ -175,7 +257,7 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
           | `(parenBinder| ($id:ident : $_ty:term)) =>
             let actual := id.getId.toString
             unless actual == expected do
-              Macro.throwError s!"parameter '{actual}' does not match path parameter '{expected}' in pattern '{pat.getString}'"
+              Macro.throwErrorAt b s!"parameter '{actual}' does not match path parameter '{expected}'"
           | _ => Macro.throwError "invalid binder syntax"
 
         let vsId := mkIdent `vs

@@ -21,9 +21,26 @@ def main : IO Unit := do
   check "splitPath /" (splitPath "/") []
 
   -- extractParamNames
-  check "extractParamNames /user/{id}" (extractParamNames "/user/{id}") ["id"]
-  check "extractParamNames /posts/{year}/{month}" (extractParamNames "/posts/{year}/{month}") ["year", "month"]
+  check "extractParamNames /user/{id}" (extractParamNames "/user/{id}") [("id", 6)]
+  check "extractParamNames /posts/{year}/{month}" (extractParamNames "/posts/{year}/{month}") [("year", 7), ("month", 14)]
   check "extractParamNames /hello" (extractParamNames "/hello") []
+
+  -- validateRoutePattern
+  checkExcept "validateRoutePattern ok" (validateRoutePattern "/user/{id}") (.ok ())
+  checkExcept "validateRoutePattern unclosed" (validateRoutePattern "/todos/{id") (.error "unclosed brace in pattern")
+  checkExcept "validateRoutePattern invalid name" (validateRoutePattern "/user/{1bad}") (.error "invalid path parameter name '1bad'")
+
+  -- isValidParamName
+  check "isValidParamName id" (isValidParamName "id") true
+  check "isValidParamName _private" (isValidParamName "_private") true
+  check "isValidParamName camelCase" (isValidParamName "camelCase") true
+  check "isValidParamName with_digits_42" (isValidParamName "with_digits_42") true
+  check "isValidParamName A" (isValidParamName "A") true
+  check "isValidParamName empty string" (isValidParamName "") false
+  check "isValidParamName starts with digit" (isValidParamName "1bad") false
+  check "isValidParamName has space" (isValidParamName "my param") false
+  check "isValidParamName has hyphen" (isValidParamName "my-param") false
+  check "isValidParamName starts with $pecial char" (isValidParamName "$pecial") false
 
   -- parsePattern
   check "parsePattern /hello" (parsePattern "/hello").parts [Sum.inl "hello"]
