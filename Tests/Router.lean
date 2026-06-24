@@ -1,4 +1,5 @@
 import Leanio.Router
+open Leanio
 open Leanio.Router
 
 def check (label : String) (actual : α) (expected : α) [DecidableEq α] [ToString α] : IO Unit :=
@@ -21,8 +22,8 @@ def main : IO Unit := do
   check "splitPath /" (splitPath "/") []
 
   -- extractParamNames
-  check "extractParamNames /user/{id}" (extractParamNames "/user/{id}") [("id", 6)]
-  check "extractParamNames /posts/{year}/{month}" (extractParamNames "/posts/{year}/{month}") [("year", 7), ("month", 14)]
+  check "extractParamNames /user/{id}" (extractParamNames "/user/{id}") ["id"]
+  check "extractParamNames /posts/{year}/{month}" (extractParamNames "/posts/{year}/{month}") ["year", "month"]
   check "extractParamNames /hello" (extractParamNames "/hello") []
 
   -- validateRoutePattern

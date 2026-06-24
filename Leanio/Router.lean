@@ -1,5 +1,6 @@
 import Lean
 import Std.Http
+import Leanio.RouteParam
 import Leanio.Utils
 open Std Http Server
 open Std.Async
@@ -8,28 +9,6 @@ open Leanio.Utils
 namespace Leanio.Router
 
 abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
-
-class FromRouteParam (α : Type) where
-  parse : String → Except String α
-
-instance : FromRouteParam String where
-  parse s := .ok s
-
-instance : FromRouteParam Nat where
-  parse s := match s.toNat? with
-    | some n => .ok n
-    | none   => .error s!"cannot parse path param as Nat: {s}"
-
-instance : FromRouteParam Int where
-  parse s := match s.toInt? with
-    | some n => .ok n
-    | none   => .error s!"cannot parse path param as Int: {s}"
-
-instance: FromRouteParam Bool where
-  parse s := match s with
-   | "true" => .ok true
-   | "false" => .ok false
-   | _ => .error s!"cannot parse path param as Bool: {s}"
 
 def splitPath (path : String) : List String :=
   (path.split '/').toList.map toString |>.filter (· ≠ "")
@@ -200,24 +179,20 @@ def validateRoutePattern (s : String) : Except String Unit :=
       | [] => chars := []
     return Except.ok ()
 
-/-- Returns (paramName, byteOffsetInString) for each {...} segment.
+/-- Returns each path parameter name from a pattern string like "/user/{id}".
 Assumes the pattern is already validated. -/
-def extractParamNames (s : String) : List (String × Nat) :=
+def extractParamNames (s : String) : List String :=
   Id.run do
     let mut chars := s.toList
-    let mut acc : List (String × Nat) := []
-    let mut idx : Nat := 0
+    let mut acc : List String := []
     while !chars.isEmpty do
       match chars with
       | '{' :: rest =>
         let (nameChars, after) := rest.span (· ≠ '}')
         let name := String.ofList nameChars
-        acc := (name, idx) :: acc
-        idx := idx + 1 + nameChars.length + 1  -- '{' + name + '}'
+        acc := name :: acc
         chars := after.tail
-      | _ :: rest =>
-        idx := idx + 1
-        chars := rest
+      | _ :: rest => chars := rest
       | [] => chars := []
     return acc.reverse
 
@@ -232,8 +207,7 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
   | .error e => Macro.throwErrorAt pat e
   | .ok () => pure ()
 
-  let paramEntries := extractParamNames patStr
-  let paramNames := paramEntries.map (·.1)
+  let paramNames := extractParamNames patStr
   let n := paramNames.length
   let methodTerm := mkIdent methodName
 
