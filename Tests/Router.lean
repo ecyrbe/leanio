@@ -14,6 +14,16 @@ partial def checkExcept (label : String) (actual : Except String α) (expected :
   | .error a, .error e => check label a e
   | _, _ => IO.println s!"FAIL: {label} — expected {expected}, got {actual}"
 
+partial def checkExceptOk (label : String) (actual : Except String α) [ToString α] : IO Unit :=
+  match actual with
+  | .ok _ => IO.println s!"PASS: {label}"
+  | .error e => IO.println s!"FAIL: {label} — expected .ok, got .error {e}"
+
+partial def checkExceptError (label : String) (actual : Except String α) (expectedMsg : String) [ToString α] : IO Unit :=
+  match actual with
+  | .error a => if a = expectedMsg then IO.println s!"PASS: {label}" else IO.println s!"FAIL: {label} — expected .error {expectedMsg}, got .error {a}"
+  | .ok v => IO.println s!"FAIL: {label} — expected .error, got .ok {v}"
+
 def main : IO Unit := do
 
   -- splitPath
@@ -63,5 +73,8 @@ def main : IO Unit := do
   checkExcept "parse String hello" ((FromRouteParam.parse : String → Except String String) "hello") (.ok "hello")
   checkExcept "parse Bool true" ((FromRouteParam.parse : String → Except String Bool) "true") (.ok true)
   checkExcept "parse Bool false" ((FromRouteParam.parse : String → Except String Bool) "false") (.ok false)
+  checkExceptOk "parse Float 3.14" ((FromRouteParam.parse : String → Except String Float) "3.14")
+  checkExceptOk "parse Float -2.5" ((FromRouteParam.parse : String → Except String Float) "-2.5")
+  checkExceptError "parse Float invalid" ((FromRouteParam.parse : String → Except String Float) "abc") "cannot parse path param as Float: abc"
 
   IO.println "All tests completed."
