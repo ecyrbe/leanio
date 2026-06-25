@@ -5,25 +5,65 @@ namespace Leanio
 class FromRouteParam (α : Type) where
   parse : String → Except String α
 
+/--
+  Extract String from a route param.
+
+  Example:
+  ```lean4
+  #eval (FromRouteParam.parse "hello" : Except String String) -- > .ok "hello"
+  ```
+-/
 instance : FromRouteParam String where
   parse s := .ok s
 
+/--
+  Extract natural number from a route param.
+
+  Example:
+  ```lean4
+  #eval (FromRouteParam.parse "6" : Except String Nat) -- > .ok 6
+  ```
+-/
 instance : FromRouteParam Nat where
   parse s := match s.toNat? with
     | some n => .ok n
     | none   => .error s!"cannot parse path param as Nat: {s}"
 
+/--
+  Extract an interger from a route param.
+
+  Example:
+  ```lean4
+  #eval (FromRouteParam.parse "-6" : Except String Int) -- > .ok -6
+  ```
+-/
 instance : FromRouteParam Int where
   parse s := match s.toInt? with
     | some n => .ok n
     | none   => .error s!"cannot parse path param as Int: {s}"
 
+/--
+  Extract boolean from a route param.
+
+  Example:
+  ```lean4
+  #eval (FromRouteParam.parse "true" : Except String Bool) -- > .ok true
+  ```
+-/
 instance : FromRouteParam Bool where
   parse s := match s with
    | "true" => .ok true
    | "false" => .ok false
    | _ => .error s!"cannot parse path param as Bool: {s}"
 
+/--
+  Extract float from a route param.
+
+  Example:
+  ```lean4
+  #eval (FromRouteParam.parse "3.14" : Except String Float) -- > .ok 3.14
+  ```
+-/
 instance : FromRouteParam Float where
   parse s :=
     match Lean.Json.parse s >>= Lean.fromJson? (α := Float) with
