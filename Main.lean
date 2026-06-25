@@ -75,18 +75,10 @@ def json.notFound (msg : String) : Async (Response Body.Full) :=
 
 end Std.Http.Response
 
-namespace Std.Http.Request
-
-def parseJson (req : Request Body.Stream) {α : Type} [FromJson α] : Async (Except String α) := do
-  let body : String ← Body.Stream.readAll req.body
-  return (Lean.Json.parse body >>= fromJson? (α := α))
-
-end Std.Http.Request
-
 def noTodoState : Async (Response Body.Any) :=
   Response.internalServerError |>.json (Json.pretty (toJson (APIError.mk "Internal Server Error" "todo state middleware not installed")))
 
-def withTodoState (req : Request Body.Stream) (f : IO.Ref TodoStore → Async (Response Body.Any)):=
+def withTodoState (req : Request α) (f : IO.Ref TodoStore → Async (Response Body.Any)):=
   match req.extensions.get TodoStoreRef with
   | some wrapper => do
     f wrapper.ref
@@ -108,23 +100,21 @@ GET "/todos/{id}" getTodoById (req : Request Body.Stream) (id : Nat) :=
     | some todo => Response.json todo
     | none      => Response.json.notFound s!"Todo {id} not found"
 
-POST "/todos" createTodo (req : Request Body.Stream) := do
-  let .ok r  ← req.parseJson | Response.json.badRequest "invalid request todo body"
+POST "/todos" createTodo (req : Request CreateTodoRequest) := do
   withTodoState req fun ref => do
     let store ← ref.get
     let newId := store.nextTodoId
-    let todo := Todo.ofCreateTodo r newId false
+    let todo := Todo.ofCreateTodo req.body newId false
     ref.set { store with todos := store.todos.insert newId todo, nextTodoId := newId + 1 }
     Response.json.created todo
 
-PUT "/todos/{id}" updateTodo (req : Request Body.Stream) (id : Nat) := do
-  let .ok upd ← req.parseJson | Response.json.badRequest "invalid request todo body"
+PUT "/todos/{id}" updateTodo (req : Request UpdateTodoRequest) (id : Nat) := do
   withTodoState req fun ref => do
     let store ← ref.get
     match store.todos.get? id with
     | none => Response.json.notFound s!"Todo {id} not found"
     | some todo =>
-      let updated := todo.ofUpdateTodo upd
+      let updated := todo.ofUpdateTodo req.body
       ref.set { store with todos := store.todos.insert id updated }
       Response.json updated
 

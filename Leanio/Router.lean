@@ -1,6 +1,7 @@
 import Lean
 import Std.Http
 import Leanio.RouteParam
+import Leanio.RouteBody
 import Leanio.Utils
 open Std Http Server
 open Std.Async
@@ -157,6 +158,12 @@ private def parseParam [FromRouteParam α] (v : String)
   | .ok v => f v
   | .error e => Response.badRequest |>.text e
 
+private def parseBody [FromRouteBody α] (req : Request Body.Stream)
+    (f : Request α → ContextAsync (Response Body.Any)) : ContextAsync (Response Body.Any) := do
+  match (← FromRouteBody.parse req.body) with
+  | .ok v => f { line := req.line, body := v, extensions := req.extensions }
+  | .error e => Response.badRequest |>.text e
+
 open Lean
 open Lean.Macro
 
@@ -224,8 +231,16 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
         | `(parenBinder| ($id:ident : $ty:term)) => pure (id, ty)
         | _ => Macro.throwError "invalid request binder"
 
+      let isRawRequest := match reqTy with
+        | `(Request Body.Stream) => true
+        | _ => false
+
       if paramBinders.isEmpty then
-        `(fun ($reqId : $reqTy) => $body)
+        if isRawRequest then
+          `(fun ($reqId : $reqTy) => $body)
+        else
+          `(fun ($reqId : Request Body.Stream) =>
+            parseBody $reqId fun ($reqId : $reqTy) => $body)
       else
         if paramBinders.length ≠ n then
           Macro.throwErrorAt pat s!"handler has {paramBinders.length} parameter(s) but pattern has {n} path parameter(s)"
@@ -250,11 +265,19 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
           | _ => Macro.throwError "invalid binder"
         ) body
 
-        `(fun ($reqId : $reqTy) =>
-          let path := toString ($reqId).line.uri.path
-          match matchPath compiled path with
-          | some $vsId:ident => $parsedBody
-          | none => Response.notFound |>.text "route not found")
+        if isRawRequest then
+          `(fun ($reqId : $reqTy) =>
+            let path := toString ($reqId).line.uri.path
+            match matchPath compiled path with
+            | some $vsId:ident => $parsedBody
+            | none => Response.notFound |>.text "route not found")
+        else
+          `(fun ($reqId : Request Body.Stream) =>
+            let path := toString ($reqId).line.uri.path
+            match matchPath compiled path with
+            | some $vsId:ident =>
+              parseBody $reqId fun ($reqId : $reqTy) => $parsedBody
+            | none => Response.notFound |>.text "route not found")
 
   `(def $name : Route :=
     let compiled : RoutePattern := parsePattern $pat

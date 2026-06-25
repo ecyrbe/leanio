@@ -54,7 +54,7 @@ def main : IO Unit := do
   check "isValidParamName starts with $pecial char" (isValidParamName "$pecial") false
 
   -- parsePattern
-  check "parsePattern /hello" (parsePattern "/hello").parts [Sum.inl "hello"]
+  check "parsePattern /hello" (parsePattern "/hello").segments [Sum.inl "hello"]
 
   -- matchPath
   check "matchPath /hello" (matchPath (parsePattern "/hello") "/hello") (some [])
