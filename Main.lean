@@ -75,6 +75,10 @@ def json.notFound (msg : String) : Async (Response Body.Full) :=
 
 end Std.Http.Response
 
+-- ==========================================
+-- State helpers
+-- ==========================================
+
 def noTodoState : Async (Response Body.Any) :=
   Response.internalServerError |>.json (Json.pretty (toJson (APIError.mk "Internal Server Error" "todo state middleware not installed")))
 
@@ -88,6 +92,10 @@ def todoMiddleware := do
   let todoRef ← IO.mkRef { todos := ∅, nextTodoId := 1 : TodoStore }
   let todoWrapper := { ref := todoRef : TodoStoreRef }
   return withState TodoStoreRef todoWrapper
+
+-- ==========================================
+-- Todo Routes
+-- ==========================================
 
 GET "/todos" listTodos (req : Request Body.Stream) :=
   withTodoState req fun ref => do

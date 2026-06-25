@@ -69,7 +69,7 @@ def Router.empty : Router :=
 def Router.addRoute (route : Route) (r : Router) : Router :=
   { r with routes := r.routes ++ [route] }
 
-def Router.addRouter (pre : String) (sub : Router) (r : Router) : Router :=
+def Router.addRouter (r : Router) (pre : String) (sub : Router) : Router :=
   { r with routers := r.routers ++ [(pre, sub)] }
 
 def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router :=
@@ -97,9 +97,10 @@ partial def dispatch (router : Router) (req : Request Body.Stream) : ContextAsyn
     for (pre, sub) in router.routers do
       match stripPathPrefix path pre with
       | some remaining =>
-        let modifiedReq : Request Body.Stream :=
-          { req with line := { req.line with uri := RequestTarget.parse! remaining } }
-        let handler : HandlerSig := fun _ => dispatch sub modifiedReq
+        let handler : HandlerSig := fun req' =>
+          let modifiedReq' : Request Body.Stream :=
+            { req' with line := { req'.line with uri := RequestTarget.parse! remaining } }
+          dispatch sub modifiedReq'
         let wrapped := applyMiddlewares router.middlewares handler
         result := some (wrapped req); break
       | none => pure ()
