@@ -11,10 +11,15 @@ namespace Leanio.Router
 abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
 
 def splitPath (path : String) : List String :=
-  (path.split '/').toList.map toString |>.filter (· ≠ "")
+  path.split '/' |>.filter (¬ ·.isEmpty) |>.map toString |>.toList
 
+/--
+  Route pattern:
+  - Sum.inl : literal string segment
+  - Sum.inr : route variable name
+-/
 structure RoutePattern where
-  parts : List (Sum String String)
+  segments : List (Sum String String)
 
 structure Route where
   method     : Method
@@ -23,7 +28,7 @@ structure Route where
   middlewares : List (HandlerSig → HandlerSig) := []
 
 def parsePattern (path : String) : RoutePattern :=
-  { parts := splitPath path |>.map fun s =>
+  { segments := splitPath path |>.map fun s =>
     if s.startsWith "{" && s.endsWith "}" then
       Sum.inr (s.drop 1 |>.dropEnd 1 |>.toString)
     else
@@ -40,7 +45,7 @@ private partial def matchImpl
   | _, _ => none
 
 def matchPath (pattern : RoutePattern) (path : String) : Option (List String) :=
-  matchImpl pattern.parts (splitPath path)
+  matchImpl pattern.segments (splitPath path)
 
 def stripPathPrefix (full : String) (pre : String) : Option String :=
   let pSegs := splitPath pre
