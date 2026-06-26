@@ -66,6 +66,15 @@ def main : IO Unit := do
   check "stripPathPrefix /api /api" (stripPathPrefix "/api" "/api") (some "/")
   check "stripPathPrefix /apix /api" (stripPathPrefix "/apix" "/api") (none : Option String)
   check "stripPathPrefix /api/user /api/v2" (stripPathPrefix "/api/user" "/api/v2") (none : Option String)
+  -- edge cases
+  check "stripPathPrefix multi-segment" (stripPathPrefix "/a/b/c" "/a/b") (some "/c")
+  check "stripPathPrefix multi-segment no match" (stripPathPrefix "/a/b/c" "/a/x") (none : Option String)
+  check "stripPathPrefix prefix longer than path" (stripPathPrefix "/a" "/a/b") (none : Option String)
+  check "stripPathPrefix root" (stripPathPrefix "/" "/") (some "/")
+  -- improper inputs (no leading /)
+  check "stripPathPrefix no leading / in full" (stripPathPrefix "api/user" "/api") (none : Option String)
+  check "stripPathPrefix no leading / in pre" (stripPathPrefix "/api/user" "api") (none : Option String)
+  check "stripPathPrefix no leading / in both" (stripPathPrefix "api/user" "api") (some "/user")
 
   -- FromRouteParam
   checkExcept "parse Nat 42" ((FromRouteParam.parse : String → Except String Nat) "42") (.ok 42)

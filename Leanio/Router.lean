@@ -18,7 +18,7 @@ def splitPath (path : String) : List String :=
   - Sum.inr : route variable name
 -/
 structure RoutePattern where
-  segments : List (Sum String String)
+  segments : List (String ⊕ String)
 
 structure Route where
   method     : Method
@@ -33,28 +33,38 @@ def parsePattern (path : String) : RoutePattern :=
     else
       Sum.inl s }
 
-private partial def matchImpl
-  (pat : List (Sum String String)) (seg : List String) : Option (List String) :=
-  match pat, seg with
-  | [], [] => some []
-  | Sum.inl lit :: pat, s :: seg =>
-    if lit == s then matchImpl pat seg else none
-  | Sum.inr _ :: pat, s :: seg =>
-    matchImpl pat seg |>.map fun rest => s :: rest
-  | _, _ => none
+private def matchImpl
+  (pat : List (String ⊕ String)) (seg : List String) : Option (List String) := do
+  if pat.length ≠ seg.length then none
+  let mut acc : List String := []
+  for (p, s) in pat.zip seg do
+    match p with
+    | Sum.inl lit => if lit ≠ s then none
+    | Sum.inr _ => acc := s :: acc
+  return acc.reverse
 
+/--
+Matches a URL path against a route pattern's segments, returning the captured
+parameter values in order.
+
+Literal segments must match exactly; `{param}` segments capture the value.
+
+```lean4
+matchPath (parsePattern "/user/{id}") "/user/42"   -- some ["42"]
+matchPath (parsePattern "/user/{id}") "/hello"      -- none
+```
+-/
 def matchPath (pattern : RoutePattern) (path : String) : Option (List String) :=
   matchImpl pattern.segments (splitPath path)
 
-def stripPathPrefix (full : String) (pre : String) : Option String :=
-  let pSegs := splitPath pre
-  let rSegs := splitPath full
-  if pSegs.length > rSegs.length then none
+def stripPathPrefix (full : String) (pre : String) : Option String := do
+  if full == pre then
+    return "/"
   else
-    let (given, remaining) := rSegs.splitAt pSegs.length
-    if given = pSegs then
-      some (if remaining.isEmpty then "/" else "/" ++ String.intercalate "/" remaining)
-    else none
+    let pos ← full.skipPrefix? pre
+    match ← pos.get? with
+    | '/' => (full.sliceFrom pos).toString
+    | _ => none
 
 structure Router where
   routes      : List Route
