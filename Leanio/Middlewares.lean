@@ -1,11 +1,26 @@
 import Leanio.Router
 import Leanio.Utils
+import Leanio.Data.Redacted
+
+namespace Std.Http.Header.Name
+
+-- Response Headers
+def wwwAuthenticate: Header.Name := mk "www-authenticate"
+
 open Leanio.Router
 open Leanio.Utils
-open Std Http Server
-open Std.Async
+
+namespace Std.Http.Header.Value
+
+def basicUnauthorized: Header.Value := mk "Basic realm=\"Restricted Area\""
+def bearerUnauthorized: Header.Value := mk "Bearer realm=\"Restricted Area\""
+
+end Std.Http.Header.Value
 
 namespace Leanio.Middlewares
+open Leanio Router Utils
+open Std Http Server
+open Std.Async
 
 /--
 Logger Middleware that logs each request and the time to respond.
@@ -40,5 +55,24 @@ Router.addMiddleware (withExtension Meta { metadata := "hello" }) router
 -/
 def withExtension (α : Type) [TypeName α] (data : α) (next : HandlerSig) : HandlerSig := fun req =>
   next { req with extensions := req.extensions.insert data }
+
+inductive AuthConfig where
+| basic (validate: String → Redacted → Async Bool)
+| bearer (validate: Redacted → Async Bool)
+
+def auth (config: AuthConfig) (next: HandlerSig) : HandlerSig := fun req => do
+  let some headerAuth := extractAuthorization req |
+    match config with
+    | .basic _ =>  Response.unauthorized |>.header Header.Name.wwwAuthenticate Header.Value.basicUnauthorized  |>.empty
+    | .bearer _ =>  Response.unauthorized |>.header Header.Name.wwwAuthenticate Header.Value.bearerUnauthorized |>.empty
+  match config with
+  | .basic validate =>
+    match parseBasicAuth headerAuth with
+    | some (user, pass) =>  if ← validate user pass then next req else Response.forbidden |>.empty
+    | none => Response.unauthorized |>.empty
+  | .bearer validate =>
+    match parseBearer headerAuth with
+    | some token => if ← validate token then next req else Response.forbidden |>.empty
+    | none => Response.unauthorized |>.empty
 
 end Leanio.Middlewares
