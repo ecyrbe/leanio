@@ -1,7 +1,9 @@
 import Leanio.Router
+import Leanio.Middlewares
 open Std Async
 open Std Http Server
 open Leanio.Router
+open Leanio.Middlewares
 open Lean
 open Std
 
@@ -91,7 +93,7 @@ def withTodoState (req : Request α) (f : IO.Ref TodoStore → Async (Response B
 def todoMiddleware := do
   let todoRef ← IO.mkRef { todos := ∅, nextTodoId := 1 : TodoStore }
   let todoWrapper := { ref := todoRef : TodoStoreRef }
-  return withState TodoStoreRef todoWrapper
+  return withExtension TodoStoreRef todoWrapper
 
 -- ==========================================
 -- Todo Routes
@@ -148,7 +150,7 @@ def todosRouter : Router := Router.empty
 
 def rootRouter : Router := Router.empty
   |>.addRouter "/api/v1" todosRouter
-  |>.addMiddleware loggingMiddleware
+  |>.addMiddleware requestLogger
 
 -- ==========================================
 -- Entry point

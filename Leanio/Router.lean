@@ -2,10 +2,8 @@ import Lean
 import Std.Http
 import Leanio.RouteParam
 import Leanio.RouteBody
-import Leanio.Utils
 open Std Http Server
 open Std.Async
-open Leanio.Utils
 
 namespace Leanio.Router
 
@@ -108,43 +106,9 @@ partial def dispatch (router : Router) (req : Request Body.Stream) : ContextAsyn
     | some r => r
     | none => Response.notFound |>.text s!"404 Not Found: {req.line.method} {path}"
 
-def loggingMiddleware (next : HandlerSig) : HandlerSig := fun req => do
-  let path := toString req.line.uri.path
-  let method := toString req.line.method
-  let start ← IO.monoNanosNow
-  IO.println s!"→ {method} {path}"
-  let res ← next req
-  let status := toString res.line.status
-  let end_ ← IO.monoNanosNow
-  IO.println s!"← {status} ({Utils.formatNanos (end_ - start)})"
-  return res
-
 -- ==========================================
 -- State injection via Extensions
 -- ==========================================
-
-/--
-Creates a middleware that injects `state` into every request's extensions.
-Use with a wrapper struct that derives `TypeName`:
-
-```lean4
-structure MyState where
-  ref : IO.Ref AppState
-deriving TypeName
-
-let ref ← IO.mkRef initialState
-Router.addMiddleware (withState MyState { ref := ref }) router
-```
--/
-def withState (α : Type) [TypeName α] (state : α) (next : HandlerSig) : HandlerSig := fun req =>
-  next { req with extensions := req.extensions.insert state }
-
-/--
-Extracts a value of type `α` from request extensions.
-Returns `none` if no middleware injected the value.
--/
-def getState (α : Type) [TypeName α] (req : Request Body.Stream) : Option α :=
-  req.extensions.get α
 
 instance : Handler Router where
   onRequest := dispatch
