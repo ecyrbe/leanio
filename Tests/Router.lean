@@ -54,7 +54,11 @@ def main : IO Unit := do
   check "isValidParamName starts with $pecial char" (isValidParamName "$pecial") false
 
   -- parsePattern
-  check "parsePattern /hello" (parsePattern "/hello").segments [Sum.inl "hello"]
+  check "parsePattern /hello" (parsePattern "/hello").segments [Segment.lit "hello"]
+  check "parsePattern /{id}" (parsePattern "/{id}").segments [Segment.param "id"]
+  check "parsePattern /user/{id}" (parsePattern "/user/{id}").segments [Segment.lit "user", Segment.param "id"]
+  check "parsePattern /{year}/{month}" (parsePattern "/{year}/{month}").segments [Segment.param "year", Segment.param "month"]
+  check "parsePattern /" (parsePattern "/").segments []
 
   -- matchPath
   check "matchPath /hello" (matchPath (parsePattern "/hello") "/hello") (some [])
