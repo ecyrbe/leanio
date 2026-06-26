@@ -87,7 +87,7 @@ Returns the handler with route-level middlewares applied, or `none` if no route 
 private def findRoute (router : Router) (methodRef : Method) (path : String) : Option HandlerSig := do
   for r in router.routes do
     if r.method = methodRef then
-      match matchPath r.pat path with
+      match r.pat.matchPath path with
       | some _ => return applyMiddlewares r.middlewares r.handler
       | none   => pure ()
   none

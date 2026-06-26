@@ -122,19 +122,19 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
         if isRawRequest then
           `(fun ($reqId : $reqTy) =>
             let path := toString ($reqId).line.uri.path
-            match matchPath compiled path with
+            match compiled.matchPath path with
             | some $vsId:ident => $parsedBody
             | none => Response.notFound |>.text "route not found")
         else
           `(fun ($reqId : Request Body.Stream) =>
             let path := toString ($reqId).line.uri.path
-            match matchPath compiled path with
+            match compiled.matchPath path with
             | some $vsId:ident =>
               parseBody $reqId fun ($reqId : $reqTy) => $parsedBody
             | none => Response.notFound |>.text "route not found")
 
   `(def $name : Route :=
-    let compiled : RoutePattern := parsePattern $pat
+    let compiled := RoutePattern.ofString $pat
     { method := $methodTerm, pat := compiled, handler := $handler })
 
 syntax "GET " str ident parenBinder* ":=" term : command

@@ -26,11 +26,6 @@ partial def checkExceptError (label : String) (actual : Except String α) (expec
 
 def main : IO Unit := do
 
-  -- splitPath
-  check "splitPath /hello" (splitPath "/hello") ["hello"]
-  check "splitPath /a/b/c" (splitPath "/a/b/c") ["a", "b", "c"]
-  check "splitPath /" (splitPath "/") []
-
   -- extractParamNames
   check "extractParamNames /user/{id}" (extractParamNames "/user/{id}") ["id"]
   check "extractParamNames /posts/{year}/{month}" (extractParamNames "/posts/{year}/{month}") ["year", "month"]
@@ -53,17 +48,17 @@ def main : IO Unit := do
   check "isValidParamName has hyphen" (isValidParamName "my-param") false
   check "isValidParamName starts with $pecial char" (isValidParamName "$pecial") false
 
-  -- parsePattern
-  check "parsePattern /hello" (parsePattern "/hello").segments [Segment.lit "hello"]
-  check "parsePattern /{id}" (parsePattern "/{id}").segments [Segment.param "id"]
-  check "parsePattern /user/{id}" (parsePattern "/user/{id}").segments [Segment.lit "user", Segment.param "id"]
-  check "parsePattern /{year}/{month}" (parsePattern "/{year}/{month}").segments [Segment.param "year", Segment.param "month"]
-  check "parsePattern /" (parsePattern "/").segments []
+  -- RoutePattern.ofString
+  check "RoutePattern.ofString /hello" (RoutePattern.ofString "/hello").segments [Segment.lit "hello"]
+  check "RoutePattern.ofString /{id}" (RoutePattern.ofString "/{id}").segments [Segment.param "id"]
+  check "RoutePattern.ofString /user/{id}" (RoutePattern.ofString "/user/{id}").segments [Segment.lit "user", Segment.param "id"]
+  check "RoutePattern.ofString /{year}/{month}" (RoutePattern.ofString "/{year}/{month}").segments [Segment.param "year", Segment.param "month"]
+  check "RoutePattern.ofString /" (RoutePattern.ofString "/").segments []
 
   -- matchPath
-  check "matchPath /hello" (matchPath (parsePattern "/hello") "/hello") (some [])
-  check "matchPath /user/42" (matchPath (parsePattern "/user/{id}") "/user/42") (some ["42"])
-  check "matchPath not found" (matchPath (parsePattern "/user/{id}") "/hello") (none : Option (List String))
+  check "matchPath /hello" ((RoutePattern.ofString "/hello").matchPath "/hello") (some [])
+  check "matchPath /user/42" ((RoutePattern.ofString "/user/{id}").matchPath "/user/42") (some ["42"])
+  check "matchPath not found" ((RoutePattern.ofString "/user/{id}").matchPath "/hello") (none : Option (List String))
 
   -- stripPathPrefix
   check "stripPathPrefix /api/user /api" (stripPathPrefix "/api/user" "/api") (some "/user")

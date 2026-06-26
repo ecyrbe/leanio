@@ -2,9 +2,6 @@ import Lean
 
 namespace Leanio.Router
 
-def splitPath (path : String) : List String :=
-  path.split '/' |>.filter (¬ ·.isEmpty) |>.map toString |>.toList
-
 /--
 A single segment of a route pattern: either a literal string to match exactly,
 or a path parameter `{name}` that captures the corresponding URL segment.
@@ -23,7 +20,10 @@ instance : ToString Segment where
 structure RoutePattern where
   segments : List Segment
 
-def parsePattern (path : String) : RoutePattern :=
+private def splitPath (path : String) : List String :=
+  path.split '/' |>.filter (¬ ·.isEmpty) |>.map toString |>.toList
+
+def RoutePattern.ofString (path : String) : RoutePattern :=
   { segments := splitPath path |>.map fun s =>
     if s.startsWith "{" && s.endsWith "}" then
       Segment.param (s.drop 1 |>.dropEnd 1 |>.toString)
@@ -47,11 +47,11 @@ parameter values in order.
 Literal segments must match exactly; `{param}` segments capture the value.
 
 ```lean4
-matchPath (parsePattern "/user/{id}") "/user/42"   -- some ["42"]
-matchPath (parsePattern "/user/{id}") "/hello"      -- none
+matchPath (RoutePattern.ofString "/user/{id}") "/user/42"   -- some ["42"]
+matchPath (RoutePattern.ofString "/user/{id}") "/hello"      -- none
 ```
 -/
-def matchPath (pattern : RoutePattern) (path : String) : Option (List String) :=
+def RoutePattern.matchPath (pattern : RoutePattern) (path : String) : Option (List String) :=
   matchImpl pattern.segments (splitPath path)
 
 end Leanio.Router
