@@ -7,8 +7,8 @@ namespace Std.Http.Header.Name
 -- Response Headers
 def wwwAuthenticate: Header.Name := mk "www-authenticate"
 
-open Leanio.Router
-open Leanio.Utils
+
+end Std.Http.Header.Name
 
 namespace Std.Http.Header.Value
 
