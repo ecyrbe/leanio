@@ -2,6 +2,18 @@ import Lean
 
 namespace Leanio
 
+/--
+Typeclass for parsing a route path parameter from a `String`.
+
+When a route pattern contains `{param}`, the matched segment is parsed using
+`FromRouteParam.parse` into the handler's argument type.
+
+Example:
+```lean4
+GET "/todos/{id}" getTodo (req : Request Body.Stream) (id : Nat) := ...
+-- "42" in the URL is parsed via `FromRouteParam.parse "42" : Except String Nat`
+```
+-/
 class FromRouteParam (α : Type) where
   parse : String → Except String α
 
