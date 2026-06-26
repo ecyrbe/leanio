@@ -70,6 +70,19 @@ def Router.addRoute (route : Route) (r : Router) : Router :=
 def Router.addRouter (r : Router) (pre : String) (sub : Router) : Router :=
   { r with routers := r.routers ++ [(pre, sub)] }
 
+/--
+Appends a middleware to the router's middleware list.
+
+Middlewares are applied with `foldl`, so the **last** middleware added runs **first** (outermost).
+In other words, `router.addMiddleware A |>.addMiddleware B` results in `B` wrapping `A`.
+
+Example:
+```lean4
+  -- catchErrors runs first (outermost), then requestLogger, then the handler
+  router.addMiddleware requestLogger
+    |>.addMiddleware catchErrors
+```
+-/
 def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router :=
   { r with middlewares := r.middlewares ++ [mw] }
 

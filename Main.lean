@@ -137,6 +137,9 @@ DELETE "/todos/{id}" deleteTodo (req : Request Body.Stream) (id : Nat) :=
       Response.ok |>.text s!"Todo {id} deleted"
     | none => Response.json.notFound s!"Todo {id} not found"
 
+GET "/error" throwTest (req : Request Body.Stream) :=
+  throw <| IO.userError "middleware test exception"
+
 -- ==========================================
 -- Router construction
 -- ==========================================
@@ -147,6 +150,7 @@ def todosRouter : Router := Router.empty
   |>.addRoute createTodo
   |>.addRoute updateTodo
   |>.addRoute deleteTodo
+  |>.addRoute throwTest
 
 def rootRouter : Router := Router.empty
   |>.addRouter "/api/v1" todosRouter
@@ -160,6 +164,7 @@ def main : IO Unit := Async.block do
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
   let router := rootRouter
     |>.addMiddleware (← todoMiddleware)
+    |>.addMiddleware catchErrors -- add last to be sure to catch any error
   let server ← Server.serve addr router
   IO.println "Listening on http://127.0.0.1:8080"
   server.waitShutdown

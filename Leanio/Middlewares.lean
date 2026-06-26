@@ -60,6 +60,41 @@ inductive AuthConfig where
 | basic (validate: String → Redacted → Async Bool)
 | bearer (validate: Redacted → Async Bool)
 
+/--
+Catches errors thrown by the next handler and returns an internal server error by default.
+
+A custom error handler can be provided to inspect the exception and return a different response.
+
+Should be added **after** other middlewares to become the outermost wrapper.
+
+Example:
+```lean4
+  router.addMiddleware requestLogger
+    |>.addMiddleware (← todoMiddleware)
+    |>.addMiddleware catchErrors
+  -- or with a custom handler:
+  router.addMiddleware <| catchErrors fun e => do
+    IO.eprintln s!"caught: {e}"
+    Response.serviceUnavailable |>.empty
+```
+-/
+def catchErrors
+    (onError : IO.Error → ContextAsync (Response Body.Any) := fun _ => Response.internalServerError |>.empty)
+    (next : HandlerSig) : HandlerSig := fun req => do
+  try
+    next req
+  catch e =>
+    onError e
+
+/--
+auth middleware that support both basic and bearer authentication.
+it delegates verification to an async predicate.
+
+Example:
+```lean4
+  router.addMiddleware <| auth (.basic fun user pwd => pure true)
+```
+-/
 def auth (config: AuthConfig) (next: HandlerSig) : HandlerSig := fun req => do
   let some headerAuth := extractAuthorization req |
     match config with
@@ -68,11 +103,19 @@ def auth (config: AuthConfig) (next: HandlerSig) : HandlerSig := fun req => do
   match config with
   | .basic validate =>
     match parseBasicAuth headerAuth with
-    | some (user, pass) =>  if ← validate user pass then next req else Response.forbidden |>.empty
+    | some (user, pass) =>
+          if ← validate user pass then
+            next req
+          else
+            Response.forbidden |>.empty
     | none => Response.unauthorized |>.empty
   | .bearer validate =>
     match parseBearer headerAuth with
-    | some token => if ← validate token then next req else Response.forbidden |>.empty
+    | some token =>
+          if ← validate token then
+            next req
+          else
+            Response.forbidden |>.empty
     | none => Response.unauthorized |>.empty
 
 end Leanio.Middlewares
