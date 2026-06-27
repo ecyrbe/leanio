@@ -220,6 +220,9 @@ DELETE "/todos/{id}/comments/{cId}" deleteComment (req : Request Body.Stream) (i
         Response.ok |>.text s!"Comment {cId} deleted"
     | none => Response.json.notFound s!"Comment {cId} not found"
 
+GET "/{*any}" anyRoute (req: Request Body.Stream) (any : String) :=
+  Response.json.notFound s!"No route matches {req.line.uri} / captured = {any}"
+
 -- ==========================================
 -- Router construction
 -- ==========================================
@@ -239,7 +242,7 @@ def todosRouter : Router := Router.empty
 
 def rootRouter : Router := Router.empty
   |>.addRouter "/api/v1" todosRouter
-  |>.addMiddleware requestLogger
+  |>.addRoute anyRoute
 
 -- ==========================================
 -- Entry point
@@ -249,7 +252,8 @@ def main : IO Unit := Async.block do
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
   let router := rootRouter
     |>.addMiddleware (← todoMiddleware)
-    |>.addMiddleware catchErrors -- add last to be sure to catch any error
+    |>.addMiddleware catchErrors -- add second to last to be sure to catch any error
+    |>.addMiddleware requestLogger -- add last to be sure to log all errors
   let server ← Server.serve addr router
   IO.println "Listening on http://127.0.0.1:8080"
   server.waitShutdown
