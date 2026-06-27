@@ -45,10 +45,40 @@ def ofUpdateTodo (upd: UpdateTodoRequest) (todo: Todo) : Todo :=
 
 end Todo
 
+-- ==========================================
+-- Comment structures
+-- ==========================================
+
+structure Comment where
+  id     : Nat
+  todoId : Nat
+  text   : String
+deriving ToJson
+
+structure CreateCommentRequest where
+  text : String
+deriving FromJson
+
+structure UpdateCommentRequest where
+  text? : Option String := none
+deriving FromJson
+
+namespace Comment
+
+def ofCreate (req : CreateCommentRequest) (id todoId : Nat) : Comment :=
+  { id, todoId, text := req.text }
+
+def ofUpdate (upd : UpdateCommentRequest) (comment : Comment) : Comment :=
+  { comment with text := upd.text?.getD comment.text }
+
+end Comment
+
 
 structure TodoStore where
-  todos      : HashMap Nat Todo
-  nextTodoId : Nat
+  todos          : HashMap Nat Todo
+  comments       : HashMap Nat Comment
+  nextTodoId     : Nat
+  nextCommentId  : Nat
 
 structure TodoStoreRef where
   ref : IO.Ref TodoStore
@@ -91,7 +121,7 @@ def withTodoState (req : Request α) (f : IO.Ref TodoStore → Async (Response B
   | none => noTodoState
 
 def todoMiddleware := do
-  let todoRef ← IO.mkRef { todos := ∅, nextTodoId := 1 : TodoStore }
+  let todoRef ← IO.mkRef { todos := ∅, comments := ∅, nextTodoId := 1, nextCommentId := 1 : TodoStore }
   let todoWrapper := { ref := todoRef : TodoStoreRef }
   return withExtension TodoStoreRef todoWrapper
 
@@ -141,6 +171,56 @@ GET "/error" throwTest (req : Request Body.Stream) :=
   throw <| IO.userError "middleware test exception"
 
 -- ==========================================
+-- Comment Routes
+-- ==========================================
+
+GET "/todos/{id}/comments" listComments (req : Request Body.Stream) (id : Nat) :=
+  withTodoState req fun ref => do
+    let store ← ref.get
+    let comments := store.comments.fold (fun acc _ c => if c.todoId == id then c :: acc else acc) []
+    Response.json comments
+
+GET "/todos/{id}/comments/{cId}" getComment (req : Request Body.Stream) (id : Nat) (cId : Nat) :=
+  withTodoState req fun ref => do
+    let store ← ref.get
+    match store.comments.get? cId with
+    | some c => if c.todoId == id then Response.json c else Response.json.notFound s!"Comment {cId} not found for Todo {id}"
+    | none => Response.json.notFound s!"Comment {cId} not found"
+
+POST "/todos/{id}/comments" createComment (req : Request CreateCommentRequest) (id : Nat) := do
+  withTodoState req fun ref => do
+    let store ← ref.get
+    let newId := store.nextCommentId
+    let comment := Comment.ofCreate req.body newId id
+    ref.set { store with
+      comments := store.comments.insert newId comment
+      nextCommentId := newId + 1 }
+    Response.json.created comment
+
+PUT "/todos/{id}/comments/{cId}" updateComment (req : Request UpdateCommentRequest) (id : Nat) (cId : Nat) := do
+  withTodoState req fun ref => do
+    let store ← ref.get
+    match store.comments.get? cId with
+    | none => Response.json.notFound s!"Comment {cId} not found"
+    | some c =>
+      if c.todoId ≠ id then
+        Response.json.notFound s!"Comment {cId} not found for Todo {id}"
+      else
+        let updated := c.ofUpdate req.body
+        ref.set { store with comments := store.comments.insert cId updated }
+        Response.json updated
+
+DELETE "/todos/{id}/comments/{cId}" deleteComment (req : Request Body.Stream) (id : Nat) (cId : Nat) :=
+  withTodoState req fun ref => do
+    let store ← ref.get
+    match store.comments.get? cId with
+    | some c =>
+      if c.todoId ≠ id then Response.json.notFound s!"Comment {cId} not found for Todo {id}" else
+        ref.set { store with comments := store.comments.erase cId }
+        Response.ok |>.text s!"Comment {cId} deleted"
+    | none => Response.json.notFound s!"Comment {cId} not found"
+
+-- ==========================================
 -- Router construction
 -- ==========================================
 
@@ -151,6 +231,11 @@ def todosRouter : Router := Router.empty
   |>.addRoute updateTodo
   |>.addRoute deleteTodo
   |>.addRoute throwTest
+  |>.addRoute listComments
+  |>.addRoute getComment
+  |>.addRoute createComment
+  |>.addRoute updateComment
+  |>.addRoute deleteComment
 
 def rootRouter : Router := Router.empty
   |>.addRouter "/api/v1" todosRouter

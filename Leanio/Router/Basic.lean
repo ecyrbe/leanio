@@ -82,13 +82,13 @@ private def applyMiddlewares (ms : List (HandlerSig → HandlerSig)) (h : Handle
 
 /--
 Searches registered routes for the first one matching `methodRef` and `path`.
-Returns the handler with route-level middlewares applied, or `none` if no route matches.
+Returns the captured parameter values and the wrapped handler, or `none` if no route matches.
 -/
-private def findRoute (router : Router) (methodRef : Method) (path : String) : Option HandlerSig := do
+private def findRoute (router : Router) (methodRef : Method) (path : String) : Option (List String × HandlerSig) := do
   for r in router.routes do
     if r.method = methodRef then
       match r.pat.matchPath path with
-      | some _ => return applyMiddlewares r.middlewares r.handler
+      | some vs => return (vs, applyMiddlewares r.middlewares r.handler)
       | none   => pure ()
   none
 
@@ -102,9 +102,10 @@ returns a 404 response.
 private partial def dispatch (router : Router) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
   let path := toString req.line.uri.path
   match findRoute router req.line.method path with
-  | some h =>
+  | some (vs, h) =>
+    let req' := { req with extensions := req.extensions.insert { values := vs.toArray : RouteParams } }
     let wrapped := applyMiddlewares router.middlewares h
-    wrapped req
+    wrapped req'
   | none   =>
     let mut result : Option (ContextAsync (Response Body.Any)) := none
     for (pre, sub) in router.routers do

@@ -8,6 +8,11 @@ open Std.Async
 
 abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
 
+/-- Carries captured path parameters through request extensions. -/
+structure RouteParams where
+  values : Array String
+deriving TypeName, Inhabited
+
 structure Route where
   method     : Method
   pat        : RoutePattern

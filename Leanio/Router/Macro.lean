@@ -66,9 +66,28 @@ def extractParamNames (s : String) : List String :=
 
 syntax parenBinder := "(" ident ":" term ")"
 
+/-- Builds a precomputed `RoutePattern` term from a path pattern string. -/
+private def mkRoutePatternTerm (path : String) : MacroM Term := do
+  let parts := path.split '/'
+    |>.map toString
+    |>.filter (fun s => !s.isEmpty)
+    |>.toList
+  let segs : List Term := parts.map fun s : String =>
+    if s.startsWith '{' && s.endsWith '}' then
+      let name := (s.drop 1).toString |>.dropRight 1
+      Syntax.mkApp (mkIdent ``Segment.param) #[Syntax.mkStrLit name]
+    else
+      Syntax.mkApp (mkIdent ``Segment.lit) #[Syntax.mkStrLit s]
+  let nilTerm := Syntax.mkApp (mkIdent ``List.nil) #[]
+  let mut listTerm := nilTerm
+  for seg in segs.reverse do
+    listTerm := Syntax.mkApp (mkIdent ``List.cons) #[seg, listTerm]
+  `({ segments := $listTerm : RoutePattern })
+
 private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyntax `ident)
     (bs : Array Syntax) (body : TSyntax `term) : MacroM Command := do
   let patStr := pat.getString
+  let patTerm ← mkRoutePatternTerm patStr
 
   match validateRoutePattern patStr with
   | .error e => Macro.throwErrorAt pat e
@@ -115,27 +134,25 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
           match b with
           | `(parenBinder| ($id:ident : $ty:term)) => do
             let idxLit := Syntax.mkNatLit i
-            `(parseParam (($vsId).toArray[$idxLit]!) fun ($id : $ty) => $inner)
+            `(parseParam ($vsId[$idxLit]!) fun ($id : $ty) => $inner)
           | _ => Macro.throwError "invalid binder"
         ) body
 
         if isRawRequest then
           `(fun ($reqId : $reqTy) =>
-            let path := toString ($reqId).line.uri.path
-            match compiled.matchPath path with
-            | some $vsId:ident => $parsedBody
-            | none => Response.notFound |>.text "route not found")
+            let $vsId:ident := match ($reqId).extensions.get Leanio.Router.RouteParams with
+              | some p => p.values
+              | none => #[]
+            $parsedBody)
         else
           `(fun ($reqId : Request Body.Stream) =>
-            let path := toString ($reqId).line.uri.path
-            match compiled.matchPath path with
-            | some $vsId:ident =>
-              parseBody $reqId fun ($reqId : $reqTy) => $parsedBody
-            | none => Response.notFound |>.text "route not found")
+            let $vsId:ident := match ($reqId).extensions.get Leanio.Router.RouteParams with
+              | some p => p.values
+              | none => #[]
+            parseBody $reqId fun ($reqId : $reqTy) => $parsedBody)
 
   `(def $name : Route :=
-    let compiled := RoutePattern.ofString $pat
-    { method := $methodTerm, pat := compiled, handler := $handler })
+    { method := $methodTerm, pat := $patTerm, handler := $handler })
 
 syntax "GET " str ident parenBinder* ":=" term : command
 macro_rules | `(GET $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.get pat name bs body

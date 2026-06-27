@@ -25,7 +25,7 @@ private def splitPath (path : String) : List String :=
 
 def RoutePattern.ofString (path : String) : RoutePattern :=
   { segments := splitPath path |>.map fun s =>
-    if s.startsWith "{" && s.endsWith "}" then
+    if s.startsWith '{' && s.endsWith '}' then
       Segment.param (s.drop 1 |>.dropEnd 1 |>.toString)
     else
       Segment.lit s }
