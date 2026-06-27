@@ -78,7 +78,7 @@ def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router 
 /--
 Looks up a handler in the trie by method and path segments. O(depth) instead of O(routes).
 -/
-private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option (List String × HandlerSig) :=
+private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option ((HashMap String String) × HandlerSig) :=
   router.trie.lookup methodRef pathSegs
 
 /--
@@ -91,9 +91,9 @@ private partial def dispatch (router : Router) (req : Request Body.Stream) : Con
   let path := toString req.line.uri.path
   let pathSegs := (splitPath path)
   match findRoute router req.line.method pathSegs with
-  | some (vs, h) =>
-    let req' := { req with extensions := req.extensions.insert { values := vs.toArray : RouteParams } }
-    let wrapped := applyMiddlewares router.middlewares h
+  | some (params, handler) =>
+    let req' := { req with extensions := req.extensions.insert { params : RouteParams } }
+    let wrapped := applyMiddlewares router.middlewares handler
     wrapped req'
   | none =>
     Response.notFound |>.text s!"404 Not Found: {req.line.method} {path}"

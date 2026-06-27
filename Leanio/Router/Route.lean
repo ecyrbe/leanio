@@ -8,9 +8,9 @@ open Std.Async
 
 abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
 
-/-- Carries captured path parameters through request extensions. -/
+/-- Carries captured path parameters through request extensions, keyed by name. -/
 structure RouteParams where
-  values : Array String
+  params : HashMap String String
 deriving TypeName, Inhabited
 
 structure Route where
@@ -39,8 +39,8 @@ the handler is already fully built.
 
 ```lean4
 def myHandler : HandlerSig := fun req => do
-  let params := (req.extensions.get Leanio.Router.RouteParams).getD { values := #[] }
-  let id := match params.values.get? 0 with | some n => n | none => "unknown"
+  let params := (req.extensions.get Leanio.Router.RouteParams).getD { params := ∅ }
+  let id := params.params.getD "id" "unknown"
   Response.ok |>.text s!"user {id}"
 
 def myRoute : Route := Route.new .get "/user/{id}" myHandler

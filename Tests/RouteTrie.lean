@@ -8,10 +8,15 @@ def h2 : HandlerSig := fun _ => default
 def h3 : HandlerSig := fun _ => default
 def h4 : HandlerSig := fun _ => default
 
-def captures (result : Option (List String × HandlerSig)) : List String :=
+def getCap (result : Option (HashMap String String × HandlerSig)) (key : String) : String :=
   match result with
-  | some (vs, _) => vs
-  | none => []
+  | some (vs, _) => vs.getD key ""
+  | none => ""
+
+def nCaps (result : Option (HashMap String String × HandlerSig)) : Nat :=
+  match result with
+  | some (vs, _) => HashMap.fold (fun acc _ _ => acc + 1) 0 vs
+  | none => 0
 
 namespace Tests.RouteTrie
 
@@ -28,7 +33,7 @@ def trie1 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "todos"] h1
 
 #guard (RouteTrie.lookup trie1 .get ["todos"]).isSome
-#guard captures (RouteTrie.lookup trie1 .get ["todos"]) == []
+#guard nCaps (RouteTrie.lookup trie1 .get ["todos"]) == 0
 #guard (RouteTrie.lookup trie1 .get ["users"]).isNone
 #guard (RouteTrie.lookup trie1 .post ["todos"]).isNone
 
@@ -39,9 +44,9 @@ def trie2 := RouteTrie.empty
   |>.addRoute .get [Segment.param "id"] h1
 
 #guard (RouteTrie.lookup trie2 .get ["42"]).isSome
-#guard captures (RouteTrie.lookup trie2 .get ["42"]) == ["42"]
+#guard getCap (RouteTrie.lookup trie2 .get ["42"]) "id" == "42"
 #guard (RouteTrie.lookup trie2 .get [""]).isSome
-#guard captures (RouteTrie.lookup trie2 .get [""]) == [""]
+#guard getCap (RouteTrie.lookup trie2 .get [""]) "id" == ""
 
 -- ==========================================
 -- literal + param in same route
@@ -50,7 +55,7 @@ def trie3 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "user", Segment.param "id"] h1
 
 #guard (RouteTrie.lookup trie3 .get ["user", "42"]).isSome
-#guard captures (RouteTrie.lookup trie3 .get ["user", "42"]) == ["42"]
+#guard getCap (RouteTrie.lookup trie3 .get ["user", "42"]) "id" == "42"
 #guard (RouteTrie.lookup trie3 .get ["user"]).isNone
 #guard (RouteTrie.lookup trie3 .get ["admin", "42"]).isNone
 #guard (RouteTrie.lookup trie3 .get ["user", "42", "extra"]).isNone
@@ -64,11 +69,11 @@ def trie4 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "x"] h3
 
 #guard (RouteTrie.lookup trie4 .get ["a", "b"]).isSome
-#guard captures (RouteTrie.lookup trie4 .get ["a", "b"]) == []
+#guard nCaps (RouteTrie.lookup trie4 .get ["a", "b"]) == 0
 #guard (RouteTrie.lookup trie4 .get ["a", "c"]).isSome
-#guard captures (RouteTrie.lookup trie4 .get ["a", "c"]) == []
+#guard nCaps (RouteTrie.lookup trie4 .get ["a", "c"]) == 0
 #guard (RouteTrie.lookup trie4 .get ["x"]).isSome
-#guard captures (RouteTrie.lookup trie4 .get ["x"]) == []
+#guard nCaps (RouteTrie.lookup trie4 .get ["x"]) == 0
 #guard (RouteTrie.lookup trie4 .get ["a", "d"]).isNone
 
 -- ==========================================
@@ -79,9 +84,9 @@ def trie5 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "settings"] h2
 
 #guard (RouteTrie.lookup trie5 .get ["settings"]).isSome
-#guard captures (RouteTrie.lookup trie5 .get ["settings"]) == []
+#guard nCaps (RouteTrie.lookup trie5 .get ["settings"]) == 0
 #guard (RouteTrie.lookup trie5 .get ["other"]).isSome
-#guard captures (RouteTrie.lookup trie5 .get ["other"]) == ["other"]
+#guard getCap (RouteTrie.lookup trie5 .get ["other"]) "id" == "other"
 
 -- ==========================================
 -- multiple methods at same path
@@ -91,9 +96,9 @@ def trie6 := RouteTrie.empty
   |>.addRoute .post [Segment.lit "items"] h2
 
 #guard (RouteTrie.lookup trie6 .get ["items"]).isSome
-#guard captures (RouteTrie.lookup trie6 .get ["items"]) == []
+#guard nCaps (RouteTrie.lookup trie6 .get ["items"]) == 0
 #guard (RouteTrie.lookup trie6 .post ["items"]).isSome
-#guard captures (RouteTrie.lookup trie6 .post ["items"]) == []
+#guard nCaps (RouteTrie.lookup trie6 .post ["items"]) == 0
 #guard (RouteTrie.lookup trie6 .put ["items"]).isNone
 
 -- ==========================================
@@ -103,7 +108,8 @@ def trie7 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "todos", Segment.param "id", Segment.lit "comments", Segment.param "cId"] h1
 
 #guard (RouteTrie.lookup trie7 .get ["todos", "1", "comments", "42"]).isSome
-#guard captures (RouteTrie.lookup trie7 .get ["todos", "1", "comments", "42"]) == ["1", "42"]
+#guard getCap (RouteTrie.lookup trie7 .get ["todos", "1", "comments", "42"]) "id" == "1"
+#guard getCap (RouteTrie.lookup trie7 .get ["todos", "1", "comments", "42"]) "cId" == "42"
 #guard (RouteTrie.lookup trie7 .get ["todos", "1", "comments"]).isNone
 #guard (RouteTrie.lookup trie7 .get ["todos", "1", "tasks", "42"]).isNone
 
@@ -114,7 +120,7 @@ def trie8 := RouteTrie.empty
   |>.addRoute .get [] h1
 
 #guard (RouteTrie.lookup trie8 .get []).isSome
-#guard captures (RouteTrie.lookup trie8 .get []) == []
+#guard nCaps (RouteTrie.lookup trie8 .get []) == 0
 #guard (RouteTrie.lookup trie8 .get ["anything"]).isNone
 
 -- ==========================================
@@ -124,7 +130,8 @@ def trie9 := RouteTrie.empty
   |>.addRouteFromPattern .get "/users/{uid}/posts/{pid}" h1
 
 #guard (RouteTrie.lookup trie9 .get ["users", "10", "posts", "99"]).isSome
-#guard captures (RouteTrie.lookup trie9 .get ["users", "10", "posts", "99"]) == ["10", "99"]
+#guard getCap (RouteTrie.lookup trie9 .get ["users", "10", "posts", "99"]) "uid" == "10"
+#guard getCap (RouteTrie.lookup trie9 .get ["users", "10", "posts", "99"]) "pid" == "99"
 #guard (RouteTrie.lookup trie9 .get ["users", "10"]).isNone
 
 -- ==========================================
@@ -140,11 +147,11 @@ def trie10 := RouteTrie.ofRoutes
   ]
 
 #guard (RouteTrie.lookup trie10 .get ["hello"]).isSome
-#guard captures (RouteTrie.lookup trie10 .get ["hello"]) == []
+#guard nCaps (RouteTrie.lookup trie10 .get ["hello"]) == 0
 #guard (RouteTrie.lookup trie10 .put ["hello"]).isSome
-#guard captures (RouteTrie.lookup trie10 .put ["hello"]) == []
+#guard nCaps (RouteTrie.lookup trie10 .put ["hello"]) == 0
 #guard (RouteTrie.lookup trie10 .get ["items", "abc"]).isSome
-#guard captures (RouteTrie.lookup trie10 .get ["items", "abc"]) == ["abc"]
+#guard getCap (RouteTrie.lookup trie10 .get ["items", "abc"]) "item" == "abc"
 #guard (RouteTrie.lookup trie10 .delete ["hello"]).isNone
 
 -- ==========================================
@@ -154,9 +161,9 @@ def trie11 := RouteTrie.empty
   |>.addRoute .get [Segment.rest "path"] h1
 
 #guard (RouteTrie.lookup trie11 .get ["anything"]).isSome
-#guard captures (RouteTrie.lookup trie11 .get ["anything"]) == ["anything"]
+#guard getCap (RouteTrie.lookup trie11 .get ["anything"]) "path" == "anything"
 #guard (RouteTrie.lookup trie11 .get ["a", "b", "c"]).isSome
-#guard captures (RouteTrie.lookup trie11 .get ["a", "b", "c"]) == ["a/b/c"]
+#guard getCap (RouteTrie.lookup trie11 .get ["a", "b", "c"]) "path" == "a/b/c"
 #guard (RouteTrie.lookup trie11 .get []).isNone
 #guard (RouteTrie.lookup trie11 .post ["anything"]).isNone
 
@@ -167,9 +174,9 @@ def trie12 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "files", Segment.rest "path"] h1
 
 #guard (RouteTrie.lookup trie12 .get ["files", "a", "b"]).isSome
-#guard captures (RouteTrie.lookup trie12 .get ["files", "a", "b"]) == ["a/b"]
+#guard getCap (RouteTrie.lookup trie12 .get ["files", "a", "b"]) "path" == "a/b"
 #guard (RouteTrie.lookup trie12 .get ["files", "a"]).isSome
-#guard captures (RouteTrie.lookup trie12 .get ["files", "a"]) == ["a"]
+#guard getCap (RouteTrie.lookup trie12 .get ["files", "a"]) "path" == "a"
 #guard (RouteTrie.lookup trie12 .get ["files"]).isNone
 #guard (RouteTrie.lookup trie12 .get ["other"]).isNone
 
@@ -182,11 +189,11 @@ def trie13 := RouteTrie.empty
   |>.addRoute .get [Segment.lit "settings"] h3
 
 #guard (RouteTrie.lookup trie13 .get ["settings"]).isSome
-#guard captures (RouteTrie.lookup trie13 .get ["settings"]) == []      -- literal wins
+#guard nCaps (RouteTrie.lookup trie13 .get ["settings"]) == 0
 #guard (RouteTrie.lookup trie13 .get ["other"]).isSome
-#guard captures (RouteTrie.lookup trie13 .get ["other"]) == ["other"]  -- wildcard wins
+#guard getCap (RouteTrie.lookup trie13 .get ["other"]) "id" == "other"
 #guard (RouteTrie.lookup trie13 .get ["a", "b"]).isSome
-#guard captures (RouteTrie.lookup trie13 .get ["a", "b"]) == ["a/b"]    -- catchall wins
+#guard getCap (RouteTrie.lookup trie13 .get ["a", "b"]) "any" == "a/b"
 
 -- ==========================================
 -- catchall via addRouteFromPattern
@@ -195,7 +202,7 @@ def trie14 := RouteTrie.empty
   |>.addRouteFromPattern .get "/static/{*rest}" h1
 
 #guard (RouteTrie.lookup trie14 .get ["static", "x", "y", "z"]).isSome
-#guard captures (RouteTrie.lookup trie14 .get ["static", "x", "y", "z"]) == ["x/y/z"]
+#guard getCap (RouteTrie.lookup trie14 .get ["static", "x", "y", "z"]) "rest" == "x/y/z"
 #guard (RouteTrie.lookup trie14 .get ["static"]).isNone
 
 end Tests.RouteTrie

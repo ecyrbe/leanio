@@ -152,28 +152,24 @@ private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
               Macro.throwErrorAt b s!"parameter '{actual}' does not match path parameter '{expected}'"
           | _ => Macro.throwError "invalid binder syntax"
 
-        let vsId := mkIdent `vs
+        let paramsId := mkIdent `params
 
-        let pairs := List.zip (List.range paramBinders.length) paramBinders
-        let parsedBody ← pairs.foldrM (fun (i, b) inner =>
+        let pairs := List.zip paramNames paramBinders
+        let parsedBody ← pairs.foldrM (fun (name, b) inner =>
           match b with
           | `(parenBinder| ($id:ident : $ty:term)) => do
-            let idxLit := Syntax.mkNatLit i
-            `(parseParam ($vsId[$idxLit]!) fun ($id : $ty) => $inner)
+            let nameLit := Syntax.mkStrLit name
+            `(parseParam ($paramsId[$nameLit]!) fun ($id : $ty) => $inner)
           | _ => Macro.throwError "invalid binder"
         ) body
 
         if isRawRequest then
           `(fun ($reqId : $reqTy) =>
-            let $vsId:ident := match ($reqId).extensions.get Leanio.Router.RouteParams with
-              | some p => p.values
-              | none => #[]
+            let $paramsId:ident := (($reqId).extensions.get Leanio.Router.RouteParams).getD { params := ∅ } |>.params
             $parsedBody)
         else
           `(fun ($reqId : Request Body.Stream) =>
-            let $vsId:ident := match ($reqId).extensions.get Leanio.Router.RouteParams with
-              | some p => p.values
-              | none => #[]
+            let $paramsId:ident := (($reqId).extensions.get Leanio.Router.RouteParams).getD { params := ∅ } |>.params
             parseBody $reqId fun ($reqId : $reqTy) => $parsedBody)
 
   `({ method := $methodTerm, pat := $patTerm, handler := $handler : Route })

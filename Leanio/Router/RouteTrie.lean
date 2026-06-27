@@ -72,24 +72,24 @@ def ofRoutes (routes : List Route) : RouteTrie :=
 /--
 Looks up a handler by method and path segments. Priority: literal > param > wildcard.
 
-Returns `some (capturedParams, handler)` where `capturedParams` are in the order
-they appear in the route pattern, or `none` if no route matches.
+Returns `some (capturedParams, handler)` where `capturedParams` maps param names
+to values, or `none` if no route matches.
 -/
-def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option (List String × HandlerSig) :=
-  go trie segs
+def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option ((HashMap String String) × HandlerSig) :=
+  go trie segs ∅
 where
-  go (t : RouteTrie) (segs : List String) : Option (List String × HandlerSig) :=
+  go (t : RouteTrie) (segs : List String) (acc : HashMap String String) : Option ((HashMap String String) × HandlerSig) :=
     match segs with
-    | [] => t.handlers.get? method |>.map (fun h => ([], h))
+    | [] => t.handlers.get? method |>.map (fun h => (acc, h))
     | seg :: rest =>
-      let litResult := t.literals.get? seg |>.bind fun child => go child rest
+      let litResult := t.literals.get? seg |>.bind fun child => go child rest acc
       let withParam := litResult.orElse fun _ =>
-        t.param |>.bind fun (_, child) =>
-          go child rest |>.map fun (vs, h) => (seg :: vs, h)
+        t.param |>.bind fun (name, child) =>
+          go child rest (acc.insert name seg)
       withParam.orElse fun _ =>
-        t.wildcard |>.bind fun (_, child) =>
+        t.wildcard |>.bind fun (name, child) =>
           child.handlers.get? method |>.map fun h =>
-            ([String.intercalate "/" (seg :: rest)], h)
+            (acc.insert name (String.intercalate "/" (seg :: rest)), h)
 
 /--
 Walks the trie depth-first, calling `f method segs handler acc` for every stored
