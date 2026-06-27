@@ -132,99 +132,99 @@ def todoMiddleware := do
 -- Todo Routes
 -- ==========================================
 
-GET "/todos" listTodos (req : Request Body.Stream) :=
-  withTodoState req fun ref => do
-    let store ← ref.get
-    Response.json store.todos.valuesArray
+def listTodos := GET "/todos" (req : Request Body.Stream) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      Response.json store.todos.valuesArray
 
-GET "/todos/{id}" getTodoById (req : Request Body.Stream) (id : Nat) :=
-  withTodoState req fun ref => do
-    match (←ref.get).todos.get? id with
-    | some todo => Response.json todo
-    | none      => Response.json.notFound s!"Todo {id} not found"
+def getTodoById := GET "/todos/{id}" (req : Request Body.Stream) (id : Nat) => do
+    withTodoState req fun ref => do
+      match (←ref.get).todos.get? id with
+      | some todo => Response.json todo
+      | none      => Response.json.notFound s!"Todo {id} not found"
 
-POST "/todos" createTodo (req : Request CreateTodoRequest) := do
-  withTodoState req fun ref => do
-    let store ← ref.get
-    let newId := store.nextTodoId
-    let todo := Todo.ofCreateTodo req.body newId false
-    ref.set { store with todos := store.todos.insert newId todo, nextTodoId := newId + 1 }
-    Response.json.created todo
+def createTodo := POST "/todos" (req : Request CreateTodoRequest) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      let newId := store.nextTodoId
+      let todo := Todo.ofCreateTodo req.body newId false
+      ref.set { store with todos := store.todos.insert newId todo, nextTodoId := newId + 1 }
+      Response.json.created todo
 
-PUT "/todos/{id}" updateTodo (req : Request UpdateTodoRequest) (id : Nat) := do
-  withTodoState req fun ref => do
-    let store ← ref.get
-    match store.todos.get? id with
-    | none => Response.json.notFound s!"Todo {id} not found"
-    | some todo =>
-      let updated := todo.ofUpdateTodo req.body
-      ref.set { store with todos := store.todos.insert id updated }
-      Response.json updated
+def updateTodo := PUT "/todos/{id}" (req : Request UpdateTodoRequest) (id : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      match store.todos.get? id with
+      | none => Response.json.notFound s!"Todo {id} not found"
+      | some todo =>
+        let updated := todo.ofUpdateTodo req.body
+        ref.set { store with todos := store.todos.insert id updated }
+        Response.json updated
 
-DELETE "/todos/{id}" deleteTodo (req : Request Body.Stream) (id : Nat) :=
-  withTodoState req fun ref => do
-    let store ← ref.get
-    match store.todos.get? id with
-    | some _ =>
-      ref.set { store with todos := store.todos.erase id }
-      Response.ok |>.text s!"Todo {id} deleted"
-    | none => Response.json.notFound s!"Todo {id} not found"
+def deleteTodo := DELETE "/todos/{id}" (req : Request Body.Stream) (id : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      match store.todos.get? id with
+      | some _ =>
+        ref.set { store with todos := store.todos.erase id }
+        Response.ok |>.text s!"Todo {id} deleted"
+      | none => Response.json.notFound s!"Todo {id} not found"
 
-GET "/error" throwTest (req : Request Body.Stream) :=
-  throw <| IO.userError "middleware test exception"
+def throwTest := GET "/error" (req : Request Body.Stream) =>
+    throw <| IO.userError "middleware test exception"
 
 -- ==========================================
 -- Comment Routes
 -- ==========================================
 
-GET "/todos/{id}/comments" listComments (req : Request Body.Stream) (id : Nat) :=
-  withTodoState req fun ref => do
-    let store ← ref.get
-    let comments := store.comments.fold (fun acc _ c => if c.todoId == id then c :: acc else acc) []
-    Response.json comments
+def listComments := GET "/todos/{id}/comments" (req : Request Body.Stream) (id : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      let comments := store.comments.fold (fun acc _ c => if c.todoId == id then c :: acc else acc) []
+      Response.json comments
 
-GET "/todos/{id}/comments/{cId}" getComment (req : Request Body.Stream) (id : Nat) (cId : Nat) :=
-  withTodoState req fun ref => do
-    let store ← ref.get
-    match store.comments.get? cId with
-    | some c => if c.todoId == id then Response.json c else Response.json.notFound s!"Comment {cId} not found for Todo {id}"
-    | none => Response.json.notFound s!"Comment {cId} not found"
+def getComment := GET "/todos/{id}/comments/{cId}" (req : Request Body.Stream) (id : Nat) (cId : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      match store.comments.get? cId with
+      | some c => if c.todoId == id then Response.json c else Response.json.notFound s!"Comment {cId} not found for Todo {id}"
+      | none => Response.json.notFound s!"Comment {cId} not found"
 
-POST "/todos/{id}/comments" createComment (req : Request CreateCommentRequest) (id : Nat) := do
-  withTodoState req fun ref => do
-    let store ← ref.get
-    let newId := store.nextCommentId
-    let comment := Comment.ofCreate req.body newId id
-    ref.set { store with
-      comments := store.comments.insert newId comment
-      nextCommentId := newId + 1 }
-    Response.json.created comment
+def createComment := POST "/todos/{id}/comments" (req : Request CreateCommentRequest) (id : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      let newId := store.nextCommentId
+      let comment := Comment.ofCreate req.body newId id
+      ref.set { store with
+        comments := store.comments.insert newId comment
+        nextCommentId := newId + 1 }
+      Response.json.created comment
 
-PUT "/todos/{id}/comments/{cId}" updateComment (req : Request UpdateCommentRequest) (id : Nat) (cId : Nat) := do
-  withTodoState req fun ref => do
-    let store ← ref.get
-    match store.comments.get? cId with
-    | none => Response.json.notFound s!"Comment {cId} not found"
-    | some c =>
-      if c.todoId ≠ id then
-        Response.json.notFound s!"Comment {cId} not found for Todo {id}"
-      else
-        let updated := c.ofUpdate req.body
-        ref.set { store with comments := store.comments.insert cId updated }
-        Response.json updated
+def updateComment := PUT "/todos/{id}/comments/{cId}" (req : Request UpdateCommentRequest) (id : Nat) (cId : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      match store.comments.get? cId with
+      | none => Response.json.notFound s!"Comment {cId} not found"
+      | some c =>
+        if c.todoId ≠ id then
+          Response.json.notFound s!"Comment {cId} not found for Todo {id}"
+        else
+          let updated := c.ofUpdate req.body
+          ref.set { store with comments := store.comments.insert cId updated }
+          Response.json updated
 
-DELETE "/todos/{id}/comments/{cId}" deleteComment (req : Request Body.Stream) (id : Nat) (cId : Nat) :=
-  withTodoState req fun ref => do
-    let store ← ref.get
-    match store.comments.get? cId with
-    | some c =>
-      if c.todoId ≠ id then Response.json.notFound s!"Comment {cId} not found for Todo {id}" else
-        ref.set { store with comments := store.comments.erase cId }
-        Response.ok |>.text s!"Comment {cId} deleted"
-    | none => Response.json.notFound s!"Comment {cId} not found"
+def deleteComment := DELETE "/todos/{id}/comments/{cId}" (req : Request Body.Stream) (id : Nat) (cId : Nat) => do
+    withTodoState req fun ref => do
+      let store ← ref.get
+      match store.comments.get? cId with
+      | some c =>
+        if c.todoId ≠ id then Response.json.notFound s!"Comment {cId} not found for Todo {id}" else
+          ref.set { store with comments := store.comments.erase cId }
+          Response.ok |>.text s!"Comment {cId} deleted"
+      | none => Response.json.notFound s!"Comment {cId} not found"
 
-GET "/{*any}" anyRoute (req: Request Body.Stream) (any : String) :=
-  Response.json.notFound s!"No route matches {req.line.uri} / captured = {any}"
+def anyRoute := GET "/{*any}" (req : Request Body.Stream) (any : String) =>
+    Response.json.notFound s!"No route matches {req.line.uri}"
 
 -- ==========================================
 -- Router construction

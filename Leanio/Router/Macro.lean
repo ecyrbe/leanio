@@ -89,8 +89,23 @@ private def mkRoutePatternTerm (path : String) : MacroM Term := do
   let hasRestLit := if hasRest then mkIdent `true else mkIdent `false
   `({ segments := $listTerm, length := $lenLit, hasRest := $hasRestLit : RoutePattern })
 
-private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyntax `ident)
-    (bs : Array Syntax) (body : TSyntax `term) : MacroM Command := do
+/--
+Maps an uppercase method keyword (e.g. `GET`) to its `Method.` constructor name
+(e.g. `Method.get`).  Most methods just lowercase the whole keyword; two
+constructors (`baselineControl`, `versionControl`) are handled specially.
+-/
+private def resolveMethodCon (keyword : Name) : Name :=
+  let s := keyword.toString
+  if s == "BASELINECONTROL" then `Method.baselineControl
+  else if s == "VERSIONCONTROL" then `Method.versionControl
+  else Name.mkStr2 "Method" (s.toLower)
+
+/--
+Expands a route term like `GET "/user/{id}" (req) (id : Nat) => body` into
+a `Route` value with a precomputed pattern and handler.
+-/
+private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
+    (bs : Array Syntax) (body : TSyntax `term) : MacroM Term := do
   let patStr := pat.getString
   let patTerm ← mkRoutePatternTerm patStr
 
@@ -161,23 +176,10 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
               | none => #[]
             parseBody $reqId fun ($reqId : $reqTy) => $parsedBody)
 
-  `(def $name : Route :=
-    { method := $methodTerm, pat := $patTerm, handler := $handler })
+  `({ method := $methodTerm, pat := $patTerm, handler := $handler : Route })
 
 /--
-Maps an uppercase method keyword (e.g. `GET`) to its `Method.` constructor name
-(e.g. `Method.get`).  Most methods just lowercase the whole keyword; two
-constructors (`baselineControl`, `versionControl`) are handled specially.
--/
-private def resolveMethodCon (keyword : Name) : Name :=
-  let s := keyword.toString
-  if s == "BASELINECONTROL" then `Method.baselineControl
-  else if s == "VERSIONCONTROL" then `Method.versionControl
-  else Name.mkStr2 "Method" (s.toLower)
-
-/--
-All valid HTTP route method keywords. Each maps to its `Method.` constructor
-via `resolveMethodCon`.
+All valid HTTP route method keywords.
 -/
 declare_syntax_cat method
 
@@ -223,18 +225,19 @@ syntax "UPDATEREDIRECTREF" : method
 syntax "VERSIONCONTROL" : method
 
 /--
-Route declaration macro.
+Route term macro. Expands to a `Route` value.
 
 ```lean4
-GET "/user/{id}" getUser (req : Request Body.Stream) (id : Nat) := ...
+def myRoute : Route := GET "/user/{id}" (req : Request Body.Stream) (id : Nat) => ...
+router.addRoute (POST "/todos" (req : Request CreateTodoRequest) => ...)
 ```
 -/
-syntax method str ident parenBinder* ":=" term : command
+syntax method str parenBinder* "=>" term : term
 
 macro_rules
-  | `($method:method $pat:str $name:ident $bs:parenBinder* := $body:term) => do
+  | `($method:method $pat:str $bs:parenBinder* => $body:term) => do
     let some source := method.raw.reprint | Macro.throwErrorAt method "failed to read method keyword"
     let methodName := source.trimAscii |>.toString |> Name.mkSimple
-    expandRouteDef (resolveMethodCon methodName) pat name bs body
+    expandRouteTerm (resolveMethodCon methodName) pat bs body
 
 end Leanio.Router
