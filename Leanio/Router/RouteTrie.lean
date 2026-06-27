@@ -27,8 +27,8 @@ avoids Lean's kernel positivity check with recursive value types.
 structure RouteTrie where
   handlers : DHashMap.Raw Method (fun _ => HandlerSig) := ∅
   literals : DHashMap.Raw String (fun _ => RouteTrie)  := ∅
-  param    : Option RouteTrie                           := none
-  wildcard : Option RouteTrie                           := none
+  param    : Option (String × RouteTrie)                := none
+  wildcard : Option (String × RouteTrie)                := none
 
 namespace RouteTrie
 
@@ -46,12 +46,12 @@ def addRoute (trie : RouteTrie) (method : Method) (segs : List Segment) (handler
   | Segment.lit s :: rest =>
     let child := trie.literals.get? s |>.getD empty
     { trie with literals := trie.literals.insert s (addRoute child method rest handler) }
-  | Segment.param _ :: rest =>
-    let child := trie.param.getD empty
-    { trie with param := some (addRoute child method rest handler) }
-  | Segment.rest _ :: rest =>
-    let child := trie.wildcard.getD empty
-    { trie with wildcard := some (addRoute child method rest handler) }
+  | Segment.param name :: rest =>
+    let child := match trie.param with | some (_, c) => c | none => empty
+    { trie with param := some (name, addRoute child method rest handler) }
+  | Segment.rest name :: rest =>
+    let child := match trie.wildcard with | some (_, c) => c | none => empty
+    { trie with wildcard := some (name, addRoute child method rest handler) }
 
 /--
 Adds a route from a runtime pattern string (e.g. `"/user/{id}"`).
@@ -70,7 +70,7 @@ def ofRoutes (routes : List Route) : RouteTrie :=
     trie.addRoute r.method r.pat.segments h
 
 /--
-Looks up a handler by method and path segments. Priority: literal > wildcard > catchall.
+Looks up a handler by method and path segments. Priority: literal > param > wildcard.
 
 Returns `some (capturedParams, handler)` where `capturedParams` are in the order
 they appear in the route pattern, or `none` if no route matches.
@@ -84,37 +84,44 @@ where
     | seg :: rest =>
       let litResult := t.literals.get? seg |>.bind fun child => go child rest
       let withParam := litResult.orElse fun _ =>
-        t.param |>.bind fun child =>
+        t.param |>.bind fun (_, child) =>
           go child rest |>.map fun (vs, h) => (seg :: vs, h)
       withParam.orElse fun _ =>
-        t.wildcard |>.bind fun child =>
+        t.wildcard |>.bind fun (_, child) =>
           child.handlers.get? method |>.map fun h =>
             ([String.intercalate "/" (seg :: rest)], h)
 
-/--
-Folds over every route in the trie, reconstructing the original `List Segment`
-path for each handler.
-
-Param and wildcard names are not preserved in the trie — reconstructed as
-placeholders. This is safe because the handler already knows param positions
-by index.
--/
 private partial def foldGo
     (f : Method → List Segment → HandlerSig → α → α)
     (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
   let acc := DHashMap.Raw.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
   let acc := DHashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
-  let acc := match t.param with | none => acc | some child => foldGo f child (Segment.param "p" :: revSegs) acc
-  let acc := match t.wildcard with | none => acc | some child => foldGo f child (Segment.rest "w" :: revSegs) acc
+  let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
+  let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
   acc
 
 /--
-Folds over every route in the trie, reconstructing the original `List Segment`
-path for each handler.
+Walks the trie depth-first, calling `f method segs handler acc` for every stored
+handler, where `segs` is the reconstructed path of `Segment` values leading to it
+with the original parameter names preserved.
 
-Param and wildcard names are not preserved in the trie — reconstructed as
-placeholders. This is safe because the handler already knows param positions
-by index.
+Example: given a trie containing
+
+  ```
+  GET /todos             → h1
+  POST /todos            → h2
+  GET /todos/{id}        → h3
+  ```
+
+`fold trie (fun m segs h acc => (m, segs) :: acc) []` produces
+
+  ```lean4
+  [(GET,  [lit "todos", param "id"]),
+   (POST, [lit "todos"]),
+   (GET,  [lit "todos"])]
+  ```
+
+(order is deterministic but insertion-dependent, not route-priority).
 -/
 def fold (trie : RouteTrie) (f : Method → List Segment → HandlerSig → α → α) (init : α) : α :=
   foldGo f trie [] init
