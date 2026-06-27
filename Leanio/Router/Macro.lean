@@ -164,22 +164,77 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
   `(def $name : Route :=
     { method := $methodTerm, pat := $patTerm, handler := $handler })
 
-syntax "GET " str ident parenBinder* ":=" term : command
-macro_rules | `(GET $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.get pat name bs body
+/--
+Maps an uppercase method keyword (e.g. `GET`) to its `Method.` constructor name
+(e.g. `Method.get`).  Most methods just lowercase the whole keyword; two
+constructors (`baselineControl`, `versionControl`) are handled specially.
+-/
+private def resolveMethodCon (keyword : Name) : Name :=
+  let s := keyword.toString
+  if s == "BASELINECONTROL" then `Method.baselineControl
+  else if s == "VERSIONCONTROL" then `Method.versionControl
+  else Name.mkStr2 "Method" (s.toLower)
 
-syntax "POST " str ident parenBinder* ":=" term : command
-macro_rules | `(POST $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.post pat name bs body
+/--
+All valid HTTP route method keywords. Each maps to its `Method.` constructor
+via `resolveMethodCon`.
+-/
+declare_syntax_cat method
 
-syntax "PUT " str ident parenBinder* ":=" term : command
-macro_rules | `(PUT $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.put pat name bs body
+syntax "GET"  : method
+syntax "POST" : method
+syntax "PUT"  : method
+syntax "DELETE" : method
+syntax "PATCH" : method
+syntax "HEAD" : method
+syntax "OPTIONS" : method
+syntax "CONNECT" : method
+syntax "TRACE" : method
+syntax "PROPFIND" : method
+syntax "PROPPATCH" : method
+syntax "MKCOL" : method
+syntax "COPY" : method
+syntax "MOVE" : method
+syntax "LOCK" : method
+syntax "UNLOCK" : method
+syntax "SEARCH" : method
+syntax "ACL" : method
+syntax "BIND" : method
+syntax "REBIND" : method
+syntax "UNBIND" : method
+syntax "REPORT" : method
+syntax "QUERY" : method
+syntax "UPDATE" : method
+syntax "LABEL" : method
+syntax "LINK" : method
+syntax "UNLINK" : method
+syntax "CHECKIN" : method
+syntax "CHECKOUT" : method
+syntax "UNCHECKOUT" : method
+syntax "MERGE" : method
+syntax "MKACTIVITY" : method
+syntax "MKCALENDAR" : method
+syntax "MKREDIRECTREF" : method
+syntax "MKWORKSPACE" : method
+syntax "ORDERPATCH" : method
+syntax "PRI" : method
+syntax "BASELINECONTROL" : method
+syntax "UPDATEREDIRECTREF" : method
+syntax "VERSIONCONTROL" : method
 
-syntax "DELETE " str ident parenBinder* ":=" term : command
-macro_rules | `(DELETE $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.delete pat name bs body
+/--
+Route declaration macro.
 
-syntax "PATCH " str ident parenBinder* ":=" term : command
-macro_rules | `(PATCH $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.patch pat name bs body
+```lean4
+GET "/user/{id}" getUser (req : Request Body.Stream) (id : Nat) := ...
+```
+-/
+syntax method str ident parenBinder* ":=" term : command
 
-syntax "HEAD " str ident parenBinder* ":=" term : command
-macro_rules | `(HEAD $pat:str $name:ident $bs:parenBinder* := $body:term) => expandRouteDef `Method.head pat name bs body
+macro_rules
+  | `($method:method $pat:str $name:ident $bs:parenBinder* := $body:term) => do
+    let some source := method.raw.reprint | Macro.throwErrorAt method "failed to read method keyword"
+    let methodName := source.trimAscii |>.toString |> Name.mkSimple
+    expandRouteDef (resolveMethodCon methodName) pat name bs body
 
 end Leanio.Router
