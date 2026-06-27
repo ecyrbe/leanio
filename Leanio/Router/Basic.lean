@@ -9,25 +9,6 @@ open Std Http Server
 open Std.Async
 
 /--
-Strips `pre` from the start of `path` at a path-segment boundary.
-Returns the remainder with a leading `/`, or `none` if `pre` is not a valid prefix.
-
-```lean4
-stripPathPrefix "/api/user" "/api"        -- some "/user"
-stripPathPrefix "/api" "/api"             -- some "/"
-stripPathPrefix "/apix" "/api"            -- none
-```
--/
-def stripPathPrefix (path : String) (pre : String) : Option String := do
-  if path == pre then
-    return "/"
-  else
-    let pos ← path.skipPrefix? pre
-    match ← pos.get? with
-    | '/' => (path.sliceFrom pos).toString
-    | _ => none
-
-/--
 A router holds a segment trie for O(depth) route dispatch
 and middlewares applied across the whole router.
 

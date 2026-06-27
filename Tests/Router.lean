@@ -63,19 +63,6 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 #guard (RoutePattern.ofString "/files/{*rest}").matchPath "/files" == some [""]
 #guard (RoutePattern.ofString "/{*any}").matchPath "/a/b/c" == some ["a/b/c"]
 
--- stripPathPrefix
-#guard stripPathPrefix "/api/user" "/api" == some "/user"
-#guard stripPathPrefix "/api" "/api" == some "/"
-#guard stripPathPrefix "/apix" "/api" == none
-#guard stripPathPrefix "/api/user" "/api/v2" == none
-#guard stripPathPrefix "/a/b/c" "/a/b" == some "/c"
-#guard stripPathPrefix "/a/b/c" "/a/x" == none
-#guard stripPathPrefix "/a" "/a/b" == none
-#guard stripPathPrefix "/" "/" == some "/"
-#guard stripPathPrefix "api/user" "/api" == none
-#guard stripPathPrefix "/api/user" "api" == none
-#guard stripPathPrefix "api/user" "api" == some "/user"
-
 -- FromRouteParam (Nat)
 #guard exceptOk (FromRouteParam.parse "42" : Except String Nat) 42
 #guard isError (FromRouteParam.parse "abc" : Except String Nat) "cannot parse path param as Nat: abc"
