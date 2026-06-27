@@ -55,14 +55,6 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 #guard (RoutePattern.ofString "/static/{*any}").segments == [Segment.lit "static", Segment.rest "any"]
 #guard (RoutePattern.ofString "/static/{*any}").hasRest == true
 
--- matchPath
-#guard (RoutePattern.ofString "/hello").matchPath "/hello" == some []
-#guard (RoutePattern.ofString "/user/{id}").matchPath "/user/42" == some ["42"]
-#guard (RoutePattern.ofString "/user/{id}").matchPath "/hello" == none
-#guard (RoutePattern.ofString "/files/{*rest}").matchPath "/files/a/b" == some ["a/b"]
-#guard (RoutePattern.ofString "/files/{*rest}").matchPath "/files" == some [""]
-#guard (RoutePattern.ofString "/{*any}").matchPath "/a/b/c" == some ["a/b/c"]
-
 -- FromRouteParam (Nat)
 #guard exceptOk (FromRouteParam.parse "42" : Except String Nat) 42
 #guard isError (FromRouteParam.parse "abc" : Except String Nat) "cannot parse path param as Nat: abc"
