@@ -32,8 +32,7 @@ middleware chaining, and sub-router mounting under path prefixes.
 import Leanio
 open Leanio.Router
 
-def hello : Route :=
-  GET "/hello" (req : Request Body.Stream) =>
+def hello := GET "/hello" (req : Request Body.Stream) =>
     Response.ok |>.text "Hello, world!"
 
 def main : IO Unit := Async.block do
@@ -50,24 +49,19 @@ Routes are defined with term macros. Each expands to a `Route` value — they ca
 named or inlined directly into a router:
 
 ```lean
-def listItems : Route :=
-  GET "/items" (req : Request Body.Stream) =>
+def listItems := GET "/items" (req : Request Body.Stream) =>
     -- raw stream body access
 
-def createItem : Route :=
-  POST "/items" (req : Request CreateItemRequest) =>
+def createItem := POST "/items" (req : Request CreateItemRequest) =>
     -- req.body auto-parsed from JSON as CreateItemRequest
 
-def getItem : Route :=
-  GET "/items/{id}" (req : Request Body.Stream) (id : Nat) =>
+def getItem := GET "/items/{id}" (req : Request Body.Stream) (id : Nat) =>
     -- id extracted from the path and parsed as Nat
 
-def updateItem : Route :=
-  PUT "/items/{id}" (req : Request UpdateItemRequest) (id : Nat) =>
+def updateItem := PUT "/items/{id}" (req : Request UpdateItemRequest) (id : Nat) =>
     -- both path params and JSON body parsing
 
-def serveFiles : Route :=
-  GET "/files/{*rest}" (req : Request Body.Stream) (rest : String) =>
+def serveFiles := GET "/files/{*rest}" (req : Request Body.Stream) (rest : String) =>
     -- rest captures everything after /files/ as a single string
 ```
 
@@ -113,8 +107,7 @@ deriving ToJson
 ### Receiving JSON in request bodies
 
 ```lean
-def createUser : Route :=
-  POST "/users" (req : Request CreateUserRequest) => do
+def createUser := POST "/users" (req : Request CreateUserRequest) => do
     let name  := req.body.name
     let email := req.body.email
     Response.json s!"created user {name}"
@@ -125,8 +118,7 @@ Malformed JSON returns `400 Bad Request` automatically.
 ### Sending JSON in responses
 
 ```lean
-def getUser : Route :=
-  GET "/users/{id}" (req : Request Body.Stream) (id : Nat) =>
+def getUser := GET "/users/{id}" (req : Request Body.Stream) (id : Nat) =>
     let user : UserResponse := { id, name := "Alice", email := "a@b.com", age := 30 }
     Response.json user
 ```
@@ -155,22 +147,18 @@ structure CreatePetRequest where
   name : String
 deriving FromJson
 
-def listPets : Route :=
-  GET "/pets" (req : Request Body.Stream) =>
+def listPets := GET "/pets" (req : Request Body.Stream) =>
     Response.json #[Pet.mk 1 "Fluffy", Pet.mk 2 "Spot"]
 
-def createPet : Route :=
-  POST "/pets" (req : Request CreatePetRequest) =>
+def createPet := POST "/pets" (req : Request CreatePetRequest) =>
     let pet := Pet.mk 3 req.body.name
     Response.json.created pet
 
-def updatePet : Route :=
-  PUT "/pets/{id}" (req : Request CreatePetRequest) (id : Nat) =>
+def updatePet := PUT "/pets/{id}" (req : Request CreatePetRequest) (id : Nat) =>
     let updated := Pet.mk id req.body.name
     Response.json updated
 
-def deletePet : Route :=
-  DELETE "/pets/{id}" (req : Request Body.Stream) (id : Nat) =>
+def deletePet := DELETE "/pets/{id}" (req : Request Body.Stream) (id : Nat) =>
     Response.ok |>.text s!"pet {id} deleted"
 ```
 
@@ -266,8 +254,7 @@ let router := rootRouter
 Extract in handlers:
 
 ```lean
-def getData : Route :=
-  GET "/data" (req : Request Body.Stream) => do
+def getData := GET "/data" (req : Request Body.Stream) => do
     match req.extensions.get AppState with
     | some state => do
       let data ← state.ref.get
