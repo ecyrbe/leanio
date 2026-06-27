@@ -100,10 +100,13 @@ def json.created [ToJson α] (j : α) : Async (Response Body.Full) :=
   Response.created |>.json <| Json.pretty <| toJson j
 
 def json.badRequest (msg : String) : Async (Response Body.Full) :=
-  Response.badRequest |>.json (Json.pretty (toJson (APIError.mk "Bad Request" msg)))
+  Response.badRequest |>.json <| Json.pretty <|toJson <| APIError.mk "Bad Request" msg
 
 def json.notFound (msg : String) : Async (Response Body.Full) :=
-  Response.notFound |>.json (Json.pretty (toJson (APIError.mk "Not Found" msg)))
+  Response.notFound |>.json <|Json.pretty <|toJson <|APIError.mk "Not Found" msg
+
+def json.internalServerError (msg: String) : Async (Response Body.Full) :=
+  Response.internalServerError |>.json <| Json.pretty <| toJson <| APIError.mk "Internal Server Error" msg
 
 end Std.Http.Response
 
@@ -112,7 +115,7 @@ end Std.Http.Response
 -- ==========================================
 
 def noTodoState : Async (Response Body.Any) :=
-  Response.internalServerError |>.json (Json.pretty (toJson (APIError.mk "Internal Server Error" "todo state middleware not installed")))
+  Response.json.internalServerError "todo state middleware not installed"
 
 def withTodoState (req : Request α) (f : IO.Ref TodoStore → Async (Response Body.Any)):=
   match req.extensions.get TodoStoreRef with
