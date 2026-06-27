@@ -91,5 +91,33 @@ where
           child.handlers.get? method |>.map fun h =>
             ([String.intercalate "/" (seg :: rest)], h)
 
+/--
+Folds over every route in the trie, reconstructing the original `List Segment`
+path for each handler.
+
+Param and wildcard names are not preserved in the trie — reconstructed as
+placeholders. This is safe because the handler already knows param positions
+by index.
+-/
+private partial def foldGo
+    (f : Method → List Segment → HandlerSig → α → α)
+    (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
+  let acc := DHashMap.Raw.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
+  let acc := DHashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
+  let acc := match t.param with | none => acc | some child => foldGo f child (Segment.param "p" :: revSegs) acc
+  let acc := match t.wildcard with | none => acc | some child => foldGo f child (Segment.rest "w" :: revSegs) acc
+  acc
+
+/--
+Folds over every route in the trie, reconstructing the original `List Segment`
+path for each handler.
+
+Param and wildcard names are not preserved in the trie — reconstructed as
+placeholders. This is safe because the handler already knows param positions
+by index.
+-/
+def fold (trie : RouteTrie) (f : Method → List Segment → HandlerSig → α → α) (init : α) : α :=
+  foldGo f trie [] init
+
 end RouteTrie
 end Leanio.Router
