@@ -104,7 +104,10 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
 
   let handler : Term ←
     match bs.toList with
-    | [] => pure body
+    | [] =>
+      if n ≠ 0 then
+        Macro.throwErrorAt pat s!"pattern has {n} path parameter(s) but handler has none"
+      pure body
     | reqBinder :: paramBinders =>
       let (reqId, reqTy) ← match reqBinder with
         | `(parenBinder| ($id:ident : $ty:term)) => pure (id, ty)
@@ -115,6 +118,8 @@ private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyn
         | _ => false
 
       if paramBinders.isEmpty then
+        if n ≠ 0 then
+          Macro.throwErrorAt pat s!"pattern has {n} path parameter(s) but handler has none"
         if isRawRequest then
           `(fun ($reqId : $reqTy) => $body)
         else
