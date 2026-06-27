@@ -74,7 +74,7 @@ private def mkRoutePatternTerm (path : String) : MacroM Term := do
     |>.toList
   let segs : List Term := parts.map fun s : String =>
     if s.startsWith '{' && s.endsWith '}' then
-      let name := (s.drop 1).toString |>.dropRight 1
+      let name := s.drop 1 |>.dropEnd 1 |>.toString
       Syntax.mkApp (mkIdent ``Segment.param) #[Syntax.mkStrLit name]
     else
       Syntax.mkApp (mkIdent ``Segment.lit) #[Syntax.mkStrLit s]
