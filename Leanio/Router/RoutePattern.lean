@@ -19,22 +19,24 @@ instance : ToString Segment where
 /-- A route pattern composed of `Segment` values, e.g. `["user", param "id"]`. -/
 structure RoutePattern where
   segments : List Segment
+  length   : Nat
 
-private def splitPath (path : String) : List String :=
+def splitPath (path : String) : List String :=
   path.split '/' |>.filter (¬ ·.isEmpty) |>.map toString |>.toList
 
 def RoutePattern.ofString (path : String) : RoutePattern :=
-  { segments := splitPath path |>.map fun s =>
+  let segs := splitPath path |>.map fun s =>
     if s.startsWith '{' && s.endsWith '}' then
       Segment.param (s.drop 1 |>.dropEnd 1 |>.toString)
     else
-      Segment.lit s }
+      Segment.lit s
+  { segments := segs, length := segs.length }
 
 private def matchImpl
-  (pat : List Segment) (seg : List String) : Option (List String) := do
-  if pat.length ≠ seg.length then failure
+  (pattern : RoutePattern) (seg : List String) : Option (List String) := do
+  if pattern.length ≠ seg.length then failure
   let mut acc : List String := []
-  for (p, s) in pat.zip seg do
+  for (p, s) in pattern.segments.zip seg do
     match p with
     | Segment.lit lit => if lit ≠ s then failure
     | Segment.param _ => acc := s :: acc
@@ -52,6 +54,9 @@ matchPath (RoutePattern.ofString "/user/{id}") "/hello"      -- none
 ```
 -/
 def RoutePattern.matchPath (pattern : RoutePattern) (path : String) : Option (List String) :=
-  matchImpl pattern.segments (splitPath path)
+  matchImpl pattern (splitPath path)
+
+def RoutePattern.matchPathSegments (pattern : RoutePattern) (segs : List String) : Option (List String) :=
+  matchImpl pattern segs
 
 end Leanio.Router

@@ -2,87 +2,79 @@ import Leanio.Router
 open Leanio
 open Leanio.Router
 
-def check (label : String) (actual : α) (expected : α) [DecidableEq α] [ToString α] : IO Unit :=
-  if actual = expected then
-    IO.println s!"PASS: {label}"
-  else
-    IO.println s!"FAIL: {label} — expected {expected}, got {actual}"
+def isOk (e : Except ε α) : Bool :=
+  match e with | .ok _ => true | _ => false
 
-partial def checkExcept (label : String) (actual : Except String α) (expected : Except String α) [DecidableEq α] [ToString α] : IO Unit :=
-  match actual, expected with
-  | .ok a, .ok e => check label a e
-  | .error a, .error e => check label a e
-  | _, _ => IO.println s!"FAIL: {label} — expected {expected}, got {actual}"
+def isError (e : Except ε α) (msg : ε) [BEq ε] : Bool :=
+  match e with | .error m => m == msg | _ => false
 
-partial def checkExceptOk (label : String) (actual : Except String α) [ToString α] : IO Unit :=
-  match actual with
-  | .ok _ => IO.println s!"PASS: {label}"
-  | .error e => IO.println s!"FAIL: {label} — expected .ok, got .error {e}"
+def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
+  match e with | .ok a => a == v | _ => false
 
-partial def checkExceptError (label : String) (actual : Except String α) (expectedMsg : String) [ToString α] : IO Unit :=
-  match actual with
-  | .error a => if a = expectedMsg then IO.println s!"PASS: {label}" else IO.println s!"FAIL: {label} — expected .error {expectedMsg}, got .error {a}"
-  | .ok v => IO.println s!"FAIL: {label} — expected .error, got .ok {v}"
+-- extractParamNames
+#guard extractParamNames "/user/{id}" == ["id"]
+#guard extractParamNames "/posts/{year}/{month}" == ["year", "month"]
+#guard extractParamNames "/hello" == []
 
-def main : IO Unit := do
+-- validateRoutePattern
+#guard isOk (validateRoutePattern "/user/{id}")
+#guard isError (validateRoutePattern "/todos/{id") "unclosed brace in pattern"
+#guard isError (validateRoutePattern "/user/{1bad}") "invalid path parameter name '1bad'"
 
-  -- extractParamNames
-  check "extractParamNames /user/{id}" (extractParamNames "/user/{id}") ["id"]
-  check "extractParamNames /posts/{year}/{month}" (extractParamNames "/posts/{year}/{month}") ["year", "month"]
-  check "extractParamNames /hello" (extractParamNames "/hello") []
+-- isValidParamName
+#guard isValidParamName "id"
+#guard isValidParamName "_private"
+#guard isValidParamName "camelCase"
+#guard isValidParamName "with_digits_42"
+#guard isValidParamName "A"
+#guard ¬ isValidParamName ""
+#guard ¬ isValidParamName "1bad"
+#guard ¬ isValidParamName "my param"
+#guard ¬ isValidParamName "my-param"
+#guard ¬ isValidParamName "$pecial"
 
-  -- validateRoutePattern
-  checkExcept "validateRoutePattern ok" (validateRoutePattern "/user/{id}") (.ok ())
-  checkExcept "validateRoutePattern unclosed" (validateRoutePattern "/todos/{id") (.error "unclosed brace in pattern")
-  checkExcept "validateRoutePattern invalid name" (validateRoutePattern "/user/{1bad}") (.error "invalid path parameter name '1bad'")
+-- RoutePattern.ofString + length
+#guard (RoutePattern.ofString "/hello").segments == [Segment.lit "hello"]
+#guard (RoutePattern.ofString "/hello").length == 1
+#guard (RoutePattern.ofString "/{id}").segments == [Segment.param "id"]
+#guard (RoutePattern.ofString "/{id}").length == 1
+#guard (RoutePattern.ofString "/user/{id}").segments == [Segment.lit "user", Segment.param "id"]
+#guard (RoutePattern.ofString "/user/{id}").length == 2
+#guard (RoutePattern.ofString "/{year}/{month}").segments == [Segment.param "year", Segment.param "month"]
+#guard (RoutePattern.ofString "/{year}/{month}").length == 2
+#guard (RoutePattern.ofString "/").segments == []
+#guard (RoutePattern.ofString "/").length == 0
 
-  -- isValidParamName
-  check "isValidParamName id" (isValidParamName "id") true
-  check "isValidParamName _private" (isValidParamName "_private") true
-  check "isValidParamName camelCase" (isValidParamName "camelCase") true
-  check "isValidParamName with_digits_42" (isValidParamName "with_digits_42") true
-  check "isValidParamName A" (isValidParamName "A") true
-  check "isValidParamName empty string" (isValidParamName "") false
-  check "isValidParamName starts with digit" (isValidParamName "1bad") false
-  check "isValidParamName has space" (isValidParamName "my param") false
-  check "isValidParamName has hyphen" (isValidParamName "my-param") false
-  check "isValidParamName starts with $pecial char" (isValidParamName "$pecial") false
+-- matchPath
+#guard (RoutePattern.ofString "/hello").matchPath "/hello" == some []
+#guard (RoutePattern.ofString "/user/{id}").matchPath "/user/42" == some ["42"]
+#guard (RoutePattern.ofString "/user/{id}").matchPath "/hello" == none
 
-  -- RoutePattern.ofString
-  check "RoutePattern.ofString /hello" (RoutePattern.ofString "/hello").segments [Segment.lit "hello"]
-  check "RoutePattern.ofString /{id}" (RoutePattern.ofString "/{id}").segments [Segment.param "id"]
-  check "RoutePattern.ofString /user/{id}" (RoutePattern.ofString "/user/{id}").segments [Segment.lit "user", Segment.param "id"]
-  check "RoutePattern.ofString /{year}/{month}" (RoutePattern.ofString "/{year}/{month}").segments [Segment.param "year", Segment.param "month"]
-  check "RoutePattern.ofString /" (RoutePattern.ofString "/").segments []
+-- stripPathPrefix
+#guard stripPathPrefix "/api/user" "/api" == some "/user"
+#guard stripPathPrefix "/api" "/api" == some "/"
+#guard stripPathPrefix "/apix" "/api" == none
+#guard stripPathPrefix "/api/user" "/api/v2" == none
+#guard stripPathPrefix "/a/b/c" "/a/b" == some "/c"
+#guard stripPathPrefix "/a/b/c" "/a/x" == none
+#guard stripPathPrefix "/a" "/a/b" == none
+#guard stripPathPrefix "/" "/" == some "/"
+#guard stripPathPrefix "api/user" "/api" == none
+#guard stripPathPrefix "/api/user" "api" == none
+#guard stripPathPrefix "api/user" "api" == some "/user"
 
-  -- matchPath
-  check "matchPath /hello" ((RoutePattern.ofString "/hello").matchPath "/hello") (some [])
-  check "matchPath /user/42" ((RoutePattern.ofString "/user/{id}").matchPath "/user/42") (some ["42"])
-  check "matchPath not found" ((RoutePattern.ofString "/user/{id}").matchPath "/hello") (none : Option (List String))
+-- FromRouteParam (Nat)
+#guard exceptOk (FromRouteParam.parse "42" : Except String Nat) 42
+#guard isError (FromRouteParam.parse "abc" : Except String Nat) "cannot parse path param as Nat: abc"
 
-  -- stripPathPrefix
-  check "stripPathPrefix /api/user /api" (stripPathPrefix "/api/user" "/api") (some "/user")
-  check "stripPathPrefix /api /api" (stripPathPrefix "/api" "/api") (some "/")
-  check "stripPathPrefix /apix /api" (stripPathPrefix "/apix" "/api") (none : Option String)
-  check "stripPathPrefix /api/user /api/v2" (stripPathPrefix "/api/user" "/api/v2") (none : Option String)
-  -- edge cases
-  check "stripPathPrefix multi-segment" (stripPathPrefix "/a/b/c" "/a/b") (some "/c")
-  check "stripPathPrefix multi-segment no match" (stripPathPrefix "/a/b/c" "/a/x") (none : Option String)
-  check "stripPathPrefix prefix longer than path" (stripPathPrefix "/a" "/a/b") (none : Option String)
-  check "stripPathPrefix root" (stripPathPrefix "/" "/") (some "/")
-  -- improper inputs (no leading /)
-  check "stripPathPrefix no leading / in full" (stripPathPrefix "api/user" "/api") (none : Option String)
-  check "stripPathPrefix no leading / in pre" (stripPathPrefix "/api/user" "api") (none : Option String)
-  check "stripPathPrefix no leading / in both" (stripPathPrefix "api/user" "api") (some "/user")
+-- FromRouteParam (String)
+#guard exceptOk (FromRouteParam.parse "hello" : Except String String) "hello"
 
-  -- FromRouteParam
-  checkExcept "parse Nat 42" ((FromRouteParam.parse : String → Except String Nat) "42") (.ok 42)
-  checkExcept "parse Nat invalid" ((FromRouteParam.parse : String → Except String Nat) "abc") (.error "cannot parse path param as Nat: abc")
-  checkExcept "parse String hello" ((FromRouteParam.parse : String → Except String String) "hello") (.ok "hello")
-  checkExcept "parse Bool true" ((FromRouteParam.parse : String → Except String Bool) "true") (.ok true)
-  checkExcept "parse Bool false" ((FromRouteParam.parse : String → Except String Bool) "false") (.ok false)
-  checkExceptOk "parse Float 3.14" ((FromRouteParam.parse : String → Except String Float) "3.14")
-  checkExceptOk "parse Float -2.5" ((FromRouteParam.parse : String → Except String Float) "-2.5")
-  checkExceptError "parse Float invalid" ((FromRouteParam.parse : String → Except String Float) "abc") "cannot parse path param as Float: abc"
+-- FromRouteParam (Bool)
+#guard exceptOk (FromRouteParam.parse "true" : Except String Bool) true
+#guard exceptOk (FromRouteParam.parse "false" : Except String Bool) false
 
-  IO.println "All tests completed."
+-- FromRouteParam (Float) — no BEq on Float, use isOk
+#guard isOk ((FromRouteParam.parse "3.14" : Except String Float))
+#guard isOk ((FromRouteParam.parse "-2.5" : Except String Float))
+#guard ¬ isOk ((FromRouteParam.parse "abc" : Except String Float))

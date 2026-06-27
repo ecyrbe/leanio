@@ -82,7 +82,8 @@ private def mkRoutePatternTerm (path : String) : MacroM Term := do
   let mut listTerm := nilTerm
   for seg in segs.reverse do
     listTerm := Syntax.mkApp (mkIdent ``List.cons) #[seg, listTerm]
-  `({ segments := $listTerm : RoutePattern })
+  let lenLit := Syntax.mkNumLit (toString parts.length)
+  `({ segments := $listTerm, length := $lenLit : RoutePattern })
 
 private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyntax `ident)
     (bs : Array Syntax) (body : TSyntax `term) : MacroM Command := do
