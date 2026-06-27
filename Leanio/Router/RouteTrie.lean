@@ -91,15 +91,6 @@ where
           child.handlers.get? method |>.map fun h =>
             ([String.intercalate "/" (seg :: rest)], h)
 
-private partial def foldGo
-    (f : Method → List Segment → HandlerSig → α → α)
-    (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
-  let acc := DHashMap.Raw.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
-  let acc := DHashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
-  let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
-  let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
-  acc
-
 /--
 Walks the trie depth-first, calling `f method segs handler acc` for every stored
 handler, where `segs` is the reconstructed path of `Segment` values leading to it
@@ -123,8 +114,14 @@ Example: given a trie containing
 
 (order is deterministic but insertion-dependent, not route-priority).
 -/
-def fold (trie : RouteTrie) (f : Method → List Segment → HandlerSig → α → α) (init : α) : α :=
+partial def fold (trie : RouteTrie) (f : Method → List Segment → HandlerSig → α → α) (init : α) : α :=
   foldGo f trie [] init
+where
+  foldGo (f : Method → List Segment → HandlerSig → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
+    let acc := DHashMap.Raw.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
+    let acc := DHashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
+    let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
+    let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
+    acc
 
-end RouteTrie
-end Leanio.Router
+end Leanio.Router.RouteTrie
