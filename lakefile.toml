@@ -1,6 +1,7 @@
 name = "leanio"
 version = "0.1.0"
 defaultTargets = ["leanio"]
+testDriver = "Tests"
 
 [[lean_lib]]
 name = "Leanio"
@@ -11,7 +12,4 @@ root = "Main"
 
 [[lean_lib]]
 name = "Tests"
-
-[[lean_exe]]
-name = "test"
-root = "Tests"
+globs = ["Tests.+"]

@@ -261,6 +261,29 @@ def getData := GET "/data" (req : Request Body.Stream) => do
       Response.json data
     | none => Response.internalServerError |>.text "no state"
 ```
+## Requirements
+
+- Lean `4.31.0`
+- Lake
+
+Toolchain is pinned in `lean-toolchain`.
+
+## Installation
+
+This repository is currently install-from-source.
+
+1. Clone the repository.
+2. Build the project:
+
+```bash
+lake build
+```
+
+3. Build and run the test target:
+
+```bash
+lake test
+```
 
 ## Supported HTTP methods
 
