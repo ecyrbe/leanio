@@ -29,40 +29,39 @@ def isValidParamName (s : String) : Bool :=
     let first := s.front
     (first.isAlpha || first == '_') && s.all fun c => c.isAlphanum || c == '_'
 
-/-- Validates route pattern structure: balanced braces and valid param names. -/
+/-- Validates route pattern structure: balanced braces and valid param names.
+Accepts `{name}` for single-segment params and `{*name}` for rest/catch-all params
+(which must be the last segment). -/
 def validateRoutePattern (s : String) : Except String Unit :=
   Id.run do
-    let mut chars := s.toList
-    while !chars.isEmpty do
-      match chars with
-      | '{' :: rest =>
-        let (nameChars, after) := rest.span (· ≠ '}')
-        if after.isEmpty then
+    let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
+    for p in parts do
+      if p.startsWith '{' || p.endsWith '}' then
+        unless p.startsWith '{' && p.endsWith '}' do
           return Except.error "unclosed brace in pattern"
-        let name := String.ofList nameChars
-        unless isValidParamName name do
-          return Except.error s!"invalid path parameter name '{name}'"
-        chars := after.tail
-      | _ :: rest => chars := rest
-      | [] => chars := []
+        let inner := p.drop 1 |>.dropEnd 1 |>.toString
+        if inner.startsWith "*" then
+          let name := inner.drop 1 |>.toString
+          unless isValidParamName name do
+            return Except.error s!"invalid rest parameter name '{name}'"
+        else
+          unless isValidParamName inner do
+            return Except.error s!"invalid path parameter name '{inner}'"
     return Except.ok ()
 
-/-- Returns each path parameter name from a pattern string like "/user/{id}".
-Assumes the pattern is already validated. -/
+/-- Returns each path parameter name from a pattern string like "/user/{id}"
+or "/files/{*path}". For rest params, the `*` is stripped from the name. -/
 def extractParamNames (s : String) : List String :=
-  Id.run do
-    let mut chars := s.toList
-    let mut acc : List String := []
-    while !chars.isEmpty do
-      match chars with
-      | '{' :: rest =>
-        let (nameChars, after) := rest.span (· ≠ '}')
-        let name := String.ofList nameChars
-        acc := name :: acc
-        chars := after.tail
-      | _ :: rest => chars := rest
-      | [] => chars := []
-    return acc.reverse
+  let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
+  parts.filterMap fun p =>
+    if p.startsWith '{' && p.endsWith '}' then
+      let inner := p.drop 1 |>.dropEnd 1 |>.toString
+      if inner.startsWith "*" then
+        some (inner.drop 1 |>.toString)
+      else
+        some inner
+    else
+      none
 
 syntax parenBinder := "(" ident ":" term ")"
 
@@ -72,8 +71,12 @@ private def mkRoutePatternTerm (path : String) : MacroM Term := do
     |>.map toString
     |>.filter (fun s => !s.isEmpty)
     |>.toList
+  let hasRest := parts.any fun s => s.startsWith "{*" && s.endsWith "}"
   let segs : List Term := parts.map fun s : String =>
-    if s.startsWith '{' && s.endsWith '}' then
+    if s.startsWith "{*" && s.endsWith "}" then
+      let name := s.drop 2 |>.dropEnd 1 |>.toString
+      Syntax.mkApp (mkIdent ``Segment.rest) #[Syntax.mkStrLit name]
+    else if s.startsWith "{" && s.endsWith "}" then
       let name := s.drop 1 |>.dropEnd 1 |>.toString
       Syntax.mkApp (mkIdent ``Segment.param) #[Syntax.mkStrLit name]
     else
@@ -83,7 +86,8 @@ private def mkRoutePatternTerm (path : String) : MacroM Term := do
   for seg in segs.reverse do
     listTerm := Syntax.mkApp (mkIdent ``List.cons) #[seg, listTerm]
   let lenLit := Syntax.mkNumLit (toString parts.length)
-  `({ segments := $listTerm, length := $lenLit : RoutePattern })
+  let hasRestLit := if hasRest then mkIdent `true else mkIdent `false
+  `({ segments := $listTerm, length := $lenLit, hasRest := $hasRestLit : RoutePattern })
 
 private def expandRouteDef (methodName : Name) (pat : TSyntax `str) (name : TSyntax `ident)
     (bs : Array Syntax) (body : TSyntax `term) : MacroM Command := do

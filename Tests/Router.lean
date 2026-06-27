@@ -14,12 +14,16 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 -- extractParamNames
 #guard extractParamNames "/user/{id}" == ["id"]
 #guard extractParamNames "/posts/{year}/{month}" == ["year", "month"]
+#guard extractParamNames "/files/{*path}" == ["path"]
 #guard extractParamNames "/hello" == []
 
 -- validateRoutePattern
 #guard isOk (validateRoutePattern "/user/{id}")
+#guard isOk (validateRoutePattern "/files/{*rest}")
+#guard isOk (validateRoutePattern "/api/{*catchall}")
 #guard isError (validateRoutePattern "/todos/{id") "unclosed brace in pattern"
 #guard isError (validateRoutePattern "/user/{1bad}") "invalid path parameter name '1bad'"
+#guard isError (validateRoutePattern "/files/{*1bad}") "invalid rest parameter name '1bad'"
 
 -- isValidParamName
 #guard isValidParamName "id"
@@ -44,11 +48,20 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 #guard (RoutePattern.ofString "/{year}/{month}").length == 2
 #guard (RoutePattern.ofString "/").segments == []
 #guard (RoutePattern.ofString "/").length == 0
+#guard (RoutePattern.ofString "/").hasRest == false
+#guard (RoutePattern.ofString "/files/{*path}").segments == [Segment.lit "files", Segment.rest "path"]
+#guard (RoutePattern.ofString "/files/{*path}").length == 2
+#guard (RoutePattern.ofString "/files/{*path}").hasRest == true
+#guard (RoutePattern.ofString "/static/{*any}").segments == [Segment.lit "static", Segment.rest "any"]
+#guard (RoutePattern.ofString "/static/{*any}").hasRest == true
 
 -- matchPath
 #guard (RoutePattern.ofString "/hello").matchPath "/hello" == some []
 #guard (RoutePattern.ofString "/user/{id}").matchPath "/user/42" == some ["42"]
 #guard (RoutePattern.ofString "/user/{id}").matchPath "/hello" == none
+#guard (RoutePattern.ofString "/files/{*rest}").matchPath "/files/a/b" == some ["a/b"]
+#guard (RoutePattern.ofString "/files/{*rest}").matchPath "/files" == some [""]
+#guard (RoutePattern.ofString "/{*any}").matchPath "/a/b/c" == some ["a/b/c"]
 
 -- stripPathPrefix
 #guard stripPathPrefix "/api/user" "/api" == some "/user"
