@@ -208,12 +208,12 @@ Lean's pipe-builder idiom. The last middleware added wraps all earlier ones:
 ```lean
 def todosRouter : Router := Router.empty
   |>.addRoute   (listTodos.addMiddleware rateLimiter)            -- route-level
-  |>.addMiddleware logging                                      -- sub-router-level
+  |>.addMiddleware auth                                          -- sub-router-level
 
 def rootRouter : Router := Router.empty
   |>.addRouter     "/api/v1" todosRouter
-  |>.addMiddleware catchErrors                                  -- inner
-  |>.addMiddleware requestLogger                                -- outermost, logs everything
+  |>.addMiddleware catchErrors                                   -- inner
+  |>.addMiddleware requestLogger                                 -- outermost, logs everything
 ```
 
 ```mermaid
@@ -221,17 +221,17 @@ sequenceDiagram
   actor Client
   participant RL as requestLogger
   participant CE as catchErrors
-  participant LG as logging
+  participant AU as auth
   participant RT as rateLimiter
   participant H as handler
   Client->>RL: inbound
   RL->>CE: next req
-  CE->>LG: next req
-  LG->>RT: next req
+  CE->>AU: next req
+  AU->>RT: next req
   RT->>H: next req
   H-->>RT: response
-  RT-->>LG: return
-  LG-->>CE: return
+  RT-->>AU: return
+  AU-->>CE: return
   CE-->>RL: return (or error)
   RL-->>Client: response
 ```
