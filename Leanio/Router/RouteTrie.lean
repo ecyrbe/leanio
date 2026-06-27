@@ -21,8 +21,7 @@ a param edge (`{param}`) for single-segment path parameters, and a wildcard edge
 
 Priority: literal > param (`{param}`) > wildcard (`{*rest}`)
 
-Uses `DHashMap.Raw` for handlers and literals — the raw hash map type
-avoids Lean's kernel positivity check with recursive value types.
+Uses `HashMap` for handlers and `HashMap.Raw` for literals to allow recursive definition
 -/
 structure RouteTrie where
   handlers : HashMap Method HandlerSig := ∅
