@@ -1,11 +1,11 @@
 import Lean
 import Std.Http
-import Leanio.RouteParam
-import Leanio.RouteBody
-import Leanio.Router.RoutePattern
-import Leanio.Router.Route
+import LeanIO.RouteParam
+import LeanIO.RouteBody
+import LeanIO.Router.RoutePattern
+import LeanIO.Router.Route
 
-namespace Leanio.Router
+namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 open Lean
@@ -165,11 +165,11 @@ private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
 
         if isRawRequest then
           `(fun ($reqId : $reqTy) =>
-            let $paramsId:ident := (($reqId).extensions.get Leanio.Router.RouteParams).getD { params := ∅ } |>.params
+            let $paramsId:ident := (($reqId).extensions.get LeanIO.Router.RouteParams).getD { params := ∅ } |>.params
             $parsedBody)
         else
           `(fun ($reqId : Request Body.Stream) =>
-            let $paramsId:ident := (($reqId).extensions.get Leanio.Router.RouteParams).getD { params := ∅ } |>.params
+            let $paramsId:ident := (($reqId).extensions.get LeanIO.Router.RouteParams).getD { params := ∅ } |>.params
             parseBody $reqId fun ($reqId : $reqTy) => $parsedBody)
 
   `({ method := $methodTerm, pat := $patTerm, handler := $handler : Route })
@@ -236,4 +236,4 @@ macro_rules
     let methodName := source.trimAscii |>.toString |> Name.mkSimple
     expandRouteTerm (resolveMethodCon methodName) pat bs body
 
-end Leanio.Router
+end LeanIO.Router

@@ -1,4 +1,4 @@
-namespace Leanio
+namespace LeanIO
 
 /-- Redacted constant string -/
 abbrev REDACTED : String := "<REDACTED>"
@@ -23,4 +23,4 @@ instance : Coe String Redacted where
 def expose (redacted : Redacted) : String :=
   redacted.value
 
-end Leanio.Redacted
+end LeanIO.Redacted

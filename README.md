@@ -1,6 +1,6 @@
 <div align="center">
 
-# Leanio
+# LeanIO
 
 [![Lean](https://img.shields.io/badge/Lean-4.31.0-0f4c81)](https://lean-lang.org/)
 [![Lake](https://img.shields.io/badge/build-Lake-blue)](https://github.com/leanprover/lake)
@@ -29,8 +29,8 @@ middleware chaining, and sub-router mounting under path prefixes.
 ## Quick Start
 
 ```lean
-import Leanio
-open Leanio.Router
+import LeanIO
+open LeanIO.Router
 
 def hello := GET "/hello" (req : Request Body.Stream) =>
     Response.ok |>.text "Hello, world!"
@@ -74,7 +74,7 @@ When the handler is pre-built and no macro-time processing is needed:
 
 ```lean
 def myHandler : HandlerSig := fun req => do
-  let params := (req.extensions.get Leanio.Router.RouteParams).getD { params := ∅ }
+  let params := (req.extensions.get LeanIO.Router.RouteParams).getD { params := ∅ }
   let id := params.params.getD "id" "unknown"
   Response.ok |>.text s!"user {id}"
 
@@ -87,7 +87,7 @@ Prefer the term macros — they validate patterns and extract params at compile 
 
 ### Defining request and response types
 
-Leanio uses Lean's `FromJson` and `ToJson` typeclasses for automatic JSON handling.
+LeanIO uses Lean's `FromJson` and `ToJson` typeclasses for automatic JSON handling.
 
 ```lean
 structure CreateUserRequest where
@@ -135,8 +135,8 @@ Response.json.notFound msg      -- 404 Not Found
 ### Full JSON CRUD example
 
 ```lean
-import Leanio.Router
-open Leanio.Router
+import LeanIO.Router
+open LeanIO.Router
 
 structure Pet where
   id   : Nat

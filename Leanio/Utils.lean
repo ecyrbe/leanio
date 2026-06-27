@@ -1,8 +1,8 @@
 import Std.Http
-import Leanio.Data.Redacted
-import Leanio.Data.String
+import LeanIO.Data.Redacted
+import LeanIO.Data.String
 
-namespace Leanio.Utils
+namespace LeanIO.Utils
 open Std.Http
 
 def formatNanos (nanos : Nat) : String :=
@@ -56,4 +56,4 @@ def parseBearer (auth: String): Option String :=
 def extractAuthorization (request: Request α): Option String :=
   request.line.headers.get? Header.Name.authorization |>.map (·.value)
 
-end Leanio.Utils
+end LeanIO.Utils

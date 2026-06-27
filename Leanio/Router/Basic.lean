@@ -1,10 +1,10 @@
 import Std.Http
 import Std.Async
-import Leanio.Router.RoutePattern
-import Leanio.Router.Route
-import Leanio.Router.RouteTrie
+import LeanIO.Router.RoutePattern
+import LeanIO.Router.Route
+import LeanIO.Router.RouteTrie
 
-namespace Leanio.Router
+namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 
@@ -102,4 +102,4 @@ private partial def dispatch (router : Router) (req : Request Body.Stream) : Con
 instance : Handler Router where
   onRequest := dispatch
 
-end Leanio.Router
+end LeanIO.Router

@@ -1,9 +1,9 @@
 import Std.Http
 import Std.Async
-import Leanio.Router.RoutePattern
-import Leanio.Router.Route
+import LeanIO.Router.RoutePattern
+import LeanIO.Router.Route
 
-namespace Leanio.Router
+namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 
@@ -124,4 +124,4 @@ where
     let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
     acc
 
-end Leanio.Router.RouteTrie
+end LeanIO.Router.RouteTrie

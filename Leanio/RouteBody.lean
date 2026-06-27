@@ -2,7 +2,7 @@ import Lean
 import Std.Http
 import Std.Async
 
-namespace Leanio
+namespace LeanIO
 open Std.Http
 open Std.Async
 open Lean
@@ -46,4 +46,4 @@ instance {α : Type} [FromJson α] : FromRouteBody α where
     let body : String ← body.readAll
     return (Lean.Json.parse body >>= fromJson? (α := α))
 
-end Leanio
+end LeanIO

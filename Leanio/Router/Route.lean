@@ -1,8 +1,8 @@
 import Std.Http
 import Std.Async
-import Leanio.Router.RoutePattern
+import LeanIO.Router.RoutePattern
 
-namespace Leanio.Router
+namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 
@@ -39,7 +39,7 @@ the handler is already fully built.
 
 ```lean4
 def myHandler : HandlerSig := fun req => do
-  let params := (req.extensions.get Leanio.Router.RouteParams).getD { params := ∅ }
+  let params := (req.extensions.get LeanIO.Router.RouteParams).getD { params := ∅ }
   let id := params.params.getD "id" "unknown"
   Response.ok |>.text s!"user {id}"
 
@@ -49,4 +49,4 @@ def myRoute : Route := Route.new .get "/user/{id}" myHandler
 def Route.new (method : Method) (pattern : String) (handler : HandlerSig) : Route :=
   { method, handler, pat := RoutePattern.ofString pattern }
 
-end Leanio.Router
+end LeanIO.Router

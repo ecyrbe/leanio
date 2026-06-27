@@ -1,6 +1,6 @@
-import Leanio.Router
-import Leanio.Utils
-import Leanio.Data.Redacted
+import LeanIO.Router
+import LeanIO.Utils
+import LeanIO.Data.Redacted
 
 namespace Std.Http.Header.Name
 
@@ -17,8 +17,8 @@ def bearerUnauthorized: Header.Value := mk "Bearer realm=\"Restricted Area\""
 
 end Std.Http.Header.Value
 
-namespace Leanio.Middlewares
-open Leanio Router Utils
+namespace LeanIO.Middlewares
+open LeanIO Router Utils
 open Std Http Server
 open Std.Async
 
@@ -118,4 +118,4 @@ def auth (config: AuthConfig) (next: HandlerSig) : HandlerSig := fun req => do
             Response.forbidden |>.empty
     | none => Response.unauthorized |>.empty
 
-end Leanio.Middlewares
+end LeanIO.Middlewares

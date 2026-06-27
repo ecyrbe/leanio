@@ -1,9 +1,9 @@
-import Leanio.Router
-import Leanio.Middlewares
+import LeanIO.Router
+import LeanIO.Middlewares
 open Std Async
 open Std Http Server
-open Leanio.Router
-open Leanio.Middlewares
+open LeanIO.Router
+open LeanIO.Middlewares
 open Lean
 open Std
 

@@ -1,6 +1,6 @@
 import Lean
 
-namespace Leanio
+namespace LeanIO
 
 /--
 Typeclass for parsing a route path parameter from a `String`.
@@ -102,4 +102,4 @@ instance {α : Type} {p : α → Prop} [FromRouteParam α] [DecidablePred p] :
     else
       throw s!"parsed value does not satisfy subtype predicate"
 
-end Leanio
+end LeanIO

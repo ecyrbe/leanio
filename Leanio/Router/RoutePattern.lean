@@ -1,6 +1,6 @@
 import Lean
 
-namespace Leanio.Router
+namespace LeanIO.Router
 
 /--
 A single segment of a route pattern:
@@ -42,4 +42,4 @@ def RoutePattern.ofString (path : String) : RoutePattern :=
     | Segment.rest _ => true | _ => false
   { segments := segs, length := segs.length, hasRest := hasRest }
 
-end Leanio.Router
+end LeanIO.Router

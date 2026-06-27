@@ -1,5 +1,5 @@
-import Leanio.Router.RouteTrie
-open Leanio.Router
+import LeanIO.Router.RouteTrie
+open LeanIO.Router
 open Std Http Server
 open Std.Async
 
