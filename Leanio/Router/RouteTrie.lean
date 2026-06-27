@@ -25,8 +25,8 @@ Uses `DHashMap.Raw` for handlers and literals — the raw hash map type
 avoids Lean's kernel positivity check with recursive value types.
 -/
 structure RouteTrie where
-  handlers : DHashMap.Raw Method (fun _ => HandlerSig) := ∅
-  literals : DHashMap.Raw String (fun _ => RouteTrie)  := ∅
+  handlers : HashMap Method HandlerSig := ∅
+  literals : HashMap.Raw String RouteTrie  := ∅
   param    : Option (String × RouteTrie)                := none
   wildcard : Option (String × RouteTrie)                := none
 
@@ -118,8 +118,8 @@ partial def fold (trie : RouteTrie) (f : Method → List Segment → HandlerSig 
   foldGo f trie [] init
 where
   foldGo (f : Method → List Segment → HandlerSig → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
-    let acc := DHashMap.Raw.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
-    let acc := DHashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
+    let acc := HashMap.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
+    let acc := HashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
     let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
     let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
     acc
