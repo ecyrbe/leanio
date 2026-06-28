@@ -77,28 +77,28 @@ to values, or `none` if no route matches.
 def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option ((HashMap String String) × HandlerSig) :=
   go trie segs ∅
 where
-  go (t : RouteTrie) (segs : List String) (acc : HashMap String String) : Option ((HashMap String String) × HandlerSig) :=
+  go (t : RouteTrie) (segs : List String) (params : HashMap String String) : Option ((HashMap String String) × HandlerSig) :=
     match segs with
     -- leaf, do we have a handler ?
     | [] => do
         let h ← t.handlers.get? method
-        return (acc, h)
+        return (params, h)
     | seg :: rest =>
     -- literal match ?
       (do
         let child ← t.literals.get? seg
-        go child rest acc)
+        go child rest params)
       <|>
       -- or else param match ?
         (do
           let (name, child) ← t.param
-          go child rest (acc.insert name seg))
+          go child rest (params.insert name seg))
       <|>
       -- or else wildcard match ?
         (do
           let (name, child) ← t.wildcard
           let h ← child.handlers.get? method
-          return (acc.insert name (String.intercalate "/" (seg :: rest)), h))
+          return (params.insert name (String.intercalate "/" (seg :: rest)), h))
 
 /--
 Walks the trie depth-first, calling `f method segs handler acc` for every stored
