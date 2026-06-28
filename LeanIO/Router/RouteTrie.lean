@@ -79,16 +79,26 @@ def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option ((
 where
   go (t : RouteTrie) (segs : List String) (acc : HashMap String String) : Option ((HashMap String String) × HandlerSig) :=
     match segs with
-    | [] => t.handlers.get? method |>.map (fun h => (acc, h))
+    -- leaf, do we have a handler ?
+    | [] => do
+        let h ← t.handlers.get? method
+        return (acc, h)
     | seg :: rest =>
-      let litResult := t.literals.get? seg |>.bind fun child => go child rest acc
-      let withParam := litResult.orElse fun _ =>
-        t.param |>.bind fun (name, child) =>
-          go child rest (acc.insert name seg)
-      withParam.orElse fun _ =>
-        t.wildcard |>.bind fun (name, child) =>
-          child.handlers.get? method |>.map fun h =>
-            (acc.insert name (String.intercalate "/" (seg :: rest)), h)
+    -- literal match ?
+      (do
+        let child ← t.literals.get? seg
+        go child rest acc)
+      <|>
+      -- or else param match ?
+        (do
+          let (name, child) ← t.param
+          go child rest (acc.insert name seg))
+      <|>
+      -- or else wildcard match ?
+        (do
+          let (name, child) ← t.wildcard
+          let h ← child.handlers.get? method
+          return (acc.insert name (String.intercalate "/" (seg :: rest)), h))
 
 /--
 Walks the trie depth-first, calling `f method segs handler acc` for every stored
