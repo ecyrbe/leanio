@@ -24,6 +24,8 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 #guard isError (validateRoutePattern "/todos/{id") "unclosed brace in pattern"
 #guard isError (validateRoutePattern "/user/{1bad}") "invalid path parameter name '1bad'"
 #guard isError (validateRoutePattern "/files/{*1bad}") "invalid rest parameter name '1bad'"
+#guard isError (validateRoutePattern "/{*rest}/files") "rest parameter 'rest' must be the last path segment"
+#guard isError (validateRoutePattern "/api/{id}/{*rest}/x") "rest parameter 'rest' must be the last path segment"
 
 -- isValidParamName
 #guard isValidParamName "id"

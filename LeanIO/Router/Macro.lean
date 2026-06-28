@@ -29,25 +29,31 @@ def isValidParamName (s : String) : Bool :=
     let first := s.front
     (first.isAlpha || first == '_') && s.all fun c => c.isAlphanum || c == '_'
 
-/-- Validates route pattern structure: balanced braces and valid param names.
-Accepts `{name}` for single-segment params and `{*name}` for rest/catch-all params
-(which must be the last segment). -/
-def validateRoutePattern (s : String) : Except String Unit :=
-  Id.run do
-    let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
-    for p in parts do
-      if p.startsWith '{' || p.endsWith '}' then
-        unless p.startsWith '{' && p.endsWith '}' do
-          return Except.error "unclosed brace in pattern"
-        let inner := p.drop 1 |>.dropEnd 1 |>.toString
-        if inner.startsWith "*" then
-          let name := inner.drop 1 |>.toString
-          unless isValidParamName name do
-            return Except.error s!"invalid rest parameter name '{name}'"
-        else
-          unless isValidParamName inner do
-            return Except.error s!"invalid path parameter name '{inner}'"
-    return Except.ok ()
+/-- Validates route pattern structure: balanced braces, valid param names,
+and ensures `{*name}` rest params appear only as the last segment. -/
+def validateRoutePattern (s : String) : Except String Unit := do
+  let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
+  let hasRest := parts.any fun p => p.startsWith "{*" && p.endsWith "}"
+  for p in parts do
+    if p.startsWith '{' || p.endsWith '}' then
+      unless p.startsWith '{' && p.endsWith '}' do
+        throw "unclosed brace in pattern"
+      let inner := p.drop 1 |>.dropEnd 1 |>.toString
+      if inner.startsWith "*" then
+        let name := inner.drop 1 |>.toString
+        unless isValidParamName name do
+          throw s!"invalid rest parameter name '{name}'"
+      else
+        unless isValidParamName inner do
+          throw s!"invalid path parameter name '{inner}'"
+  if hasRest then
+    let lastPart := parts.getLast?.getD ""
+    unless lastPart.startsWith "{*" && lastPart.endsWith "}" do
+      let name := parts.find? (fun p => p.startsWith "{*" && p.endsWith "}")
+        |>.getD ""
+        |>.drop 2 |>.dropEnd 1 |>.toString
+      throw s!"rest parameter '{name}' must be the last path segment"
+  return ()
 
 /-- Returns each path parameter name from a pattern string like "/user/{id}"
 or "/files/{*path}". For rest params, the `*` is stripped from the name. -/
