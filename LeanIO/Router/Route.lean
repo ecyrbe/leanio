@@ -8,10 +8,13 @@ open Std.Async
 
 abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
 
-/-- Carries captured path parameters through request extensions, keyed by name. -/
+/-- Carries captured path parameters through request extensions. -/
 structure RouteParams where
-  params : HashMap String String
+  params : List (String × String)
 deriving TypeName, Inhabited
+
+def RouteParams.lookup (p : RouteParams) (key : String) : Option String :=
+  p.params.find? (·.1 == key) |>.map (·.2)
 
 structure Route where
   method     : Method

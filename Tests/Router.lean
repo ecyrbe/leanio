@@ -56,19 +56,3 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 #guard (RoutePattern.ofString "/files/{*path}").hasRest == true
 #guard (RoutePattern.ofString "/static/{*any}").segments == [Segment.lit "static", Segment.rest "any"]
 #guard (RoutePattern.ofString "/static/{*any}").hasRest == true
-
--- FromRouteParam (Nat)
-#guard exceptOk (FromRouteParam.parse "42" : Except String Nat) 42
-#guard isError (FromRouteParam.parse "abc" : Except String Nat) "cannot parse path param as Nat: abc"
-
--- FromRouteParam (String)
-#guard exceptOk (FromRouteParam.parse "hello" : Except String String) "hello"
-
--- FromRouteParam (Bool)
-#guard exceptOk (FromRouteParam.parse "true" : Except String Bool) true
-#guard exceptOk (FromRouteParam.parse "false" : Except String Bool) false
-
--- FromRouteParam (Float) — no BEq on Float, use isOk
-#guard isOk ((FromRouteParam.parse "3.14" : Except String Float))
-#guard isOk ((FromRouteParam.parse "-2.5" : Except String Float))
-#guard ¬ isOk ((FromRouteParam.parse "abc" : Except String Float))

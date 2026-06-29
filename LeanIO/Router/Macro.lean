@@ -1,27 +1,14 @@
 import Lean
 import Std.Http
-import LeanIO.RouteParam
-import LeanIO.RouteBody
 import LeanIO.Router.RoutePattern
 import LeanIO.Router.Route
+import LeanIO.Router.HandlerAdapter
 
 namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 open Lean
 open Lean.Macro
-
-private def parseParam [FromRouteParam α] (v : String)
-    (f : α → ContextAsync (Response Body.Any)) : ContextAsync (Response Body.Any) :=
-  match FromRouteParam.parse v with
-  | .ok v => f v
-  | .error e => Response.badRequest |>.text e
-
-private def parseBody [FromRouteBody α] (req : Request Body.Stream)
-    (f : Request α → ContextAsync (Response Body.Any)) : ContextAsync (Response Body.Any) := do
-  match (← FromRouteBody.parse req.body) with
-  | .ok v => f { line := req.line, body := v, extensions := req.extensions }
-  | .error e => Response.badRequest |>.text e
 
 def isValidParamName (s : String) : Bool :=
   if s.isEmpty then false
@@ -69,7 +56,7 @@ def extractParamNames (s : String) : List String :=
     else
       none
 
-syntax parenBinder := "(" ident ":" term ")"
+syntax extractorBinder := "(" term ":" term ")"
 
 /-- Builds a precomputed `RoutePattern` term from a path pattern string. -/
 private def mkRoutePatternTerm (path : String) : MacroM Term := do
@@ -107,7 +94,7 @@ private def resolveMethodCon (keyword : Name) : Name :=
   else Name.mkStr2 "Method" (s.toLower)
 
 /--
-Expands a route term like `GET "/user/{id}" (req) (id : Nat) => body` into
+Expands a route term like `GET "/user/{id}" (⟨id⟩: Path Nat) => body` into
 a `Route` value with a precomputed pattern and handler.
 -/
 private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
@@ -120,63 +107,29 @@ private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
   | .ok () => pure ()
 
   let paramNames := extractParamNames patStr
-  let n := paramNames.length
+  unless paramNames.isEmpty do
+    let hasPath := bs.any fun b =>
+      match b with
+      | `(extractorBinder| ($_:term : Path $_)) => true
+      | _ => false
+    unless hasPath do
+      Macro.throwErrorAt pat s!"pattern has path parameter(s) {paramNames} but no Path extractor in handler"
+
   let methodTerm := mkIdent methodName
 
   let handler : Term ←
     match bs.toList with
     | [] =>
-      if n ≠ 0 then
-        Macro.throwErrorAt pat s!"pattern has {n} path parameter(s) but handler has none"
-      pure body
-    | reqBinder :: paramBinders =>
-      let (reqId, reqTy) ← match reqBinder with
-        | `(parenBinder| ($id:ident : $ty:term)) => pure (id, ty)
-        | _ => Macro.throwError "invalid request binder"
-
-      let isRawRequest := match reqTy with
-        | `(Request Body.Stream) => true
-        | _ => false
-
-      if paramBinders.isEmpty then
-        if n ≠ 0 then
-          Macro.throwErrorAt pat s!"pattern has {n} path parameter(s) but handler has none"
-        if isRawRequest then
-          `(fun ($reqId : $reqTy) => $body)
-        else
-          `(fun ($reqId : Request Body.Stream) =>
-            parseBody $reqId fun ($reqId : $reqTy) => $body)
-      else
-        if paramBinders.length ≠ n then
-          Macro.throwErrorAt pat s!"handler has {paramBinders.length} parameter(s) but pattern has {n} path parameter(s)"
-
-        for (expected, b) in List.zip paramNames paramBinders do
-          match b with
-          | `(parenBinder| ($id:ident : $_ty:term)) =>
-            let actual := id.getId.toString
-            unless actual == expected do
-              Macro.throwErrorAt b s!"parameter '{actual}' does not match path parameter '{expected}'"
-          | _ => Macro.throwError "invalid binder syntax"
-
-        let paramsId := mkIdent `params
-
-        let pairs := List.zip paramNames paramBinders
-        let parsedBody ← pairs.foldrM (fun (name, b) inner =>
-          match b with
-          | `(parenBinder| ($id:ident : $ty:term)) => do
-            let nameLit := Syntax.mkStrLit name
-            `(parseParam ($paramsId[$nameLit]!) fun ($id : $ty) => $inner)
-          | _ => Macro.throwError "invalid binder"
-        ) body
-
-        if isRawRequest then
-          `(fun ($reqId : $reqTy) =>
-            let $paramsId:ident := (($reqId).extensions.get LeanIO.Router.RouteParams).getD { params := ∅ } |>.params
-            $parsedBody)
-        else
-          `(fun ($reqId : Request Body.Stream) =>
-            let $paramsId:ident := (($reqId).extensions.get LeanIO.Router.RouteParams).getD { params := ∅ } |>.params
-            parseBody $reqId fun ($reqId : $reqTy) => $parsedBody)
+      `(let fn (_ : Unit) : Std.Async.ContextAsync _ := $body; LeanIO.HandlerAdapter.adapt fn)
+    | binders =>
+      let ascribedBody : Term := ← `(($body : Std.Async.ContextAsync _))
+      let lam ← binders.foldrM (fun b inner => do
+        match b with
+        | `(extractorBinder| ($pat:term : $ty:term)) =>
+          `(fun ($pat : $ty) => $inner)
+        | _ => Macro.throwErrorAt b "invalid extractor binder"
+      ) ascribedBody
+      `(let fn := $lam; LeanIO.HandlerAdapter.adapt fn)
 
   `({ method := $methodTerm, pat := $patTerm, handler := $handler : Route })
 
@@ -234,10 +187,10 @@ def myRoute : Route := GET "/user/{id}" (req : Request Body.Stream) (id : Nat) =
 router.addRoute (POST "/todos" (req : Request CreateTodoRequest) => ...)
 ```
 -/
-syntax method str parenBinder* "=>" term : term
+syntax method str extractorBinder* "=>" term : term
 
 macro_rules
-  | `($method:method $pat:str $bs:parenBinder* => $body:term) => do
+  | `($method:method $pat:str $bs:extractorBinder* => $body:term) => do
     let some source := method.raw.reprint | Macro.throwErrorAt method "failed to read method keyword"
     let methodName := source.trimAscii |>.toString |> Name.mkSimple
     expandRouteTerm (resolveMethodCon methodName) pat bs body

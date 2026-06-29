@@ -78,7 +78,7 @@ def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router 
 /--
 Looks up a handler in the trie by method and path segments. O(depth) instead of O(routes).
 -/
-private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option ((HashMap String String) × HandlerSig) :=
+private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option (List (String × String) × HandlerSig) :=
   router.trie.lookup methodRef pathSegs
 
 /--

@@ -74,10 +74,10 @@ Looks up a handler by method and path segments. Priority: literal > param > wild
 Returns `some (capturedParams, handler)` where `capturedParams` maps param names
 to values, or `none` if no route matches.
 -/
-def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option ((HashMap String String) × HandlerSig) :=
-  go trie segs ∅
+def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerSig) :=
+  go trie segs []
 where
-  go (t : RouteTrie) (segs : List String) (params : HashMap String String) : Option ((HashMap String String) × HandlerSig) :=
+  go (t : RouteTrie) (segs : List String) (params : List (String × String)) : Option (List (String × String) × HandlerSig) :=
     match segs with
     -- leaf, do we have a handler ?
     | [] => do
@@ -92,13 +92,13 @@ where
       -- or else param match ?
         (do
           let (name, child) ← t.param
-          go child rest (params.insert name seg))
+          go child rest (params ++ [(name, seg)]))
       <|>
       -- or else wildcard match ?
         (do
           let (name, child) ← t.wildcard
           let h ← child.handlers.get? method
-          return (params.insert name (String.intercalate "/" (seg :: rest)), h))
+          return (params ++ [(name, String.intercalate "/" (seg :: rest))], h))
 
 /--
 Walks the trie depth-first, calling `f method segs handler acc` for every stored

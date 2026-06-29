@@ -1,7 +1,11 @@
 import LeanIO.Router
 import LeanIO.Middlewares
+import LeanIO.Request.FromRequestParts
+import LeanIO.Request.FromRequestBody
+import LeanIO.Response.IntoResponse
 open Std Async
 open Std Http Server
+open LeanIO
 open LeanIO.Router
 open LeanIO.Middlewares
 open Lean
@@ -89,142 +93,115 @@ structure APIError where
   message : String
 deriving ToJson, FromJson
 
--- ==========================================
--- JSON helpers
--- ==========================================
-namespace Std.Http.Response
-def json [ToJson α] (j : α) : Async (Response Body.Full) :=
-  Response.ok |>.json <| Json.pretty <| toJson j
-
-def json.created [ToJson α] (j : α) : Async (Response Body.Full) :=
-  Response.created |>.json <| Json.pretty <| toJson j
-
-def json.badRequest (msg : String) : Async (Response Body.Full) :=
-  Response.badRequest |>.json <| Json.pretty <|toJson <| APIError.mk "Bad Request" msg
-
-def json.notFound (msg : String) : Async (Response Body.Full) :=
-  Response.notFound |>.json <|Json.pretty <|toJson <|APIError.mk "Not Found" msg
-
-def json.internalServerError (msg: String) : Async (Response Body.Full) :=
-  Response.internalServerError |>.json <| Json.pretty <| toJson <| APIError.mk "Internal Server Error" msg
-
-end Std.Http.Response
 
 -- ==========================================
 -- State helpers
 -- ==========================================
-
-def noTodoState : Async (Response Body.Any) :=
-  Response.json.internalServerError "todo state middleware not installed"
-
-def withTodoState (req : Request α) (f : IO.Ref TodoStore → Async (Response Body.Any)):=
-  match req.extensions.get TodoStoreRef with
-  | some wrapper => do
-    f wrapper.ref
-  | none => noTodoState
 
 def todoMiddleware := do
   let todoRef ← IO.mkRef { todos := ∅, comments := ∅, nextTodoId := 1, nextCommentId := 1 : TodoStore }
   let todoWrapper := { ref := todoRef : TodoStoreRef }
   return withExtension TodoStoreRef todoWrapper
 
+instance : FromRequestParts TodoStoreRef where
+  from_request_parts req :=
+    match req.extensions.get TodoStoreRef with
+    | some ref => .ok ref
+    | none => .error "todo state middleware not installed"
+
 -- ==========================================
 -- Todo Routes
 -- ==========================================
+def test: (TodoStoreRef → ContextAsync (Array Todo)) := fun (⟨ref⟩ : TodoStoreRef) => do
+    let store ← ref.get
+    return store.todos.valuesArray
 
-def listTodos := GET "/todos" (req : Request Body.Stream) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      Response.json store.todos.valuesArray
+def listTodos := GET "/todos" (⟨ref⟩ : TodoStoreRef) => do
+    let store ← ref.get
+    return store.todos.valuesArray
 
-def getTodoById := GET "/todos/{id}" (req : Request Body.Stream) (id : Nat) => do
-    withTodoState req fun ref => do
-      match (←ref.get).todos.get? id with
-      | some todo => Response.json todo
-      | none      => Response.json.notFound s!"Todo {id} not found"
+def getTodoById := GET "/todos/{id}" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
+    match (← ref.get).todos.get? id with
+    | some todo => return Except.ok todo
+    | none      => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Todo {id} not found")
 
-def createTodo := POST "/todos" (req : Request CreateTodoRequest) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      let newId := store.nextTodoId
-      let todo := Todo.ofCreateTodo req.body newId false
-      ref.set { store with todos := store.todos.insert newId todo, nextTodoId := newId + 1 }
-      Response.json.created todo
+def createTodo := POST "/todos" (⟨body⟩ : Json CreateTodoRequest) (⟨ref⟩ : TodoStoreRef) => do
+    let store ← ref.get
+    let newId := store.nextTodoId
+    let todo := Todo.ofCreateTodo body newId false
+    ref.set { store with todos := store.todos.insert newId todo, nextTodoId := newId + 1 }
+    return (Status.created, todo)
 
-def updateTodo := PUT "/todos/{id}" (req : Request UpdateTodoRequest) (id : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      match store.todos.get? id with
-      | none => Response.json.notFound s!"Todo {id} not found"
-      | some todo =>
-        let updated := todo.ofUpdateTodo req.body
-        ref.set { store with todos := store.todos.insert id updated }
-        Response.json updated
+def updateTodo := PUT "/todos/{id}" (⟨body⟩ : Json UpdateTodoRequest) (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
+    let store ← ref.get
+    match store.todos.get? id with
+    | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Todo {id} not found")
+    | some todo =>
+      let updated := todo.ofUpdateTodo body
+      ref.set { store with todos := store.todos.insert id updated }
+      return Except.ok updated
 
-def deleteTodo := DELETE "/todos/{id}" (req : Request Body.Stream) (id : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      match store.todos.get? id with
-      | some _ =>
-        ref.set { store with todos := store.todos.erase id }
-        Response.ok |>.text s!"Todo {id} deleted"
-      | none => Response.json.notFound s!"Todo {id} not found"
+def deleteTodo := DELETE "/todos/{id}" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
+    let store ← ref.get
+    match store.todos.get? id with
+    | some _ =>
+      ref.set { store with todos := store.todos.erase id }
+      return Except.ok s!"Todo {id} deleted"
+    | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Todo {id} not found")
 
-def throwTest := GET "/error" (req : Request Body.Stream) =>
+def throwTest := GET "/error" =>
     throw <| IO.userError "middleware test exception"
 
 -- ==========================================
 -- Comment Routes
 -- ==========================================
 
-def listComments := GET "/todos/{id}/comments" (req : Request Body.Stream) (id : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      let comments := store.comments.fold (fun acc _ c => if c.todoId == id then c :: acc else acc) []
-      Response.json comments
+def listComments := GET "/todos/{id}/comments" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
+    let store ← ref.get
+    let comments := store.comments.fold (init := []) fun acc (_ : Nat) (c : Comment) => if c.todoId == id then c :: acc else acc
+    return comments
 
-def getComment := GET "/todos/{id}/comments/{cId}" (req : Request Body.Stream) (id : Nat) (cId : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      match store.comments.get? cId with
-      | some c => if c.todoId == id then Response.json c else Response.json.notFound s!"Comment {cId} not found for Todo {id}"
-      | none => Response.json.notFound s!"Comment {cId} not found"
+def getComment := GET "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨ids⟩ : Path (Nat × Nat)) => do
+    let (id, cId) := ids
+    match (← ref.get).comments.get? cId with
+    | some c => if c.todoId == id then return Except.ok c else return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found for Todo {id}")
+    | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
 
-def createComment := POST "/todos/{id}/comments" (req : Request CreateCommentRequest) (id : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      let newId := store.nextCommentId
-      let comment := Comment.ofCreate req.body newId id
-      ref.set { store with
-        comments := store.comments.insert newId comment
-        nextCommentId := newId + 1 }
-      Response.json.created comment
+def createComment := POST "/todos/{id}/comments" (⟨body⟩ : Json CreateCommentRequest) (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
+    let store ← ref.get
+    let newId := store.nextCommentId
+    let comment := Comment.ofCreate body newId id
+    ref.set { store with
+      comments := store.comments.insert newId comment
+      nextCommentId := newId + 1 }
+    return (Status.created, comment)
 
-def updateComment := PUT "/todos/{id}/comments/{cId}" (req : Request UpdateCommentRequest) (id : Nat) (cId : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      match store.comments.get? cId with
-      | none => Response.json.notFound s!"Comment {cId} not found"
-      | some c =>
-        if c.todoId ≠ id then
-          Response.json.notFound s!"Comment {cId} not found for Todo {id}"
-        else
-          let updated := c.ofUpdate req.body
-          ref.set { store with comments := store.comments.insert cId updated }
-          Response.json updated
+def updateComment := PUT "/todos/{id}/comments/{cId}" (⟨body⟩ : Json UpdateCommentRequest) (⟨ref⟩ : TodoStoreRef) (⟨ids⟩ : Path (Nat × Nat)) => do
+    let (id, cId) := ids
+    let store ← ref.get
+    match store.comments.get? cId with
+    | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
+    | some c =>
+      if c.todoId ≠ id then
+        return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found for Todo {id}")
+      else
+        let updated := c.ofUpdate body
+        ref.set { store with comments := store.comments.insert cId updated }
+        return Except.ok updated
 
-def deleteComment := DELETE "/todos/{id}/comments/{cId}" (req : Request Body.Stream) (id : Nat) (cId : Nat) => do
-    withTodoState req fun ref => do
-      let store ← ref.get
-      match store.comments.get? cId with
-      | some c =>
-        if c.todoId ≠ id then Response.json.notFound s!"Comment {cId} not found for Todo {id}" else
-          ref.set { store with comments := store.comments.erase cId }
-          Response.ok |>.text s!"Comment {cId} deleted"
-      | none => Response.json.notFound s!"Comment {cId} not found"
+def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨ids⟩ : Path (Nat × Nat)) => do
+    let (id, cId) := ids
+    let store ← ref.get
+    match store.comments.get? cId with
+    | some c =>
+      if c.todoId ≠ id then
+        return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found for Todo {id}")
+      ref.set { store with comments := store.comments.erase cId }
+      return Except.ok s!"Comment {cId} deleted"
+    | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
 
-def anyRoute := GET "/{*any}" (req : Request Body.Stream) (any : String) =>
-    Response.json.notFound s!"No route matches {req.line.uri}"
+def anyRoute := GET "/{*rest}" (⟨rest⟩ : Path String) =>
+    pure (Status.notFound, APIError.mk "Not Found" "no matching route")
 
 -- ==========================================
 -- Router construction

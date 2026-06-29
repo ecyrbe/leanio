@@ -8,14 +8,14 @@ def h2 : HandlerSig := fun _ => default
 def h3 : HandlerSig := fun _ => default
 def h4 : HandlerSig := fun _ => default
 
-def getCap (result : Option (HashMap String String × HandlerSig)) (key : String) : String :=
+def getCap (result : Option (List (String × String) × HandlerSig)) (key : String) : String :=
   match result with
-  | some (vs, _) => vs.getD key ""
+  | some (vs, _) => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
   | none => ""
 
-def nCaps (result : Option (HashMap String String × HandlerSig)) : Nat :=
+def nCaps (result : Option (List (String × String) × HandlerSig)) : Nat :=
   match result with
-  | some (vs, _) => HashMap.fold (fun acc _ _ => acc + 1) 0 vs
+  | some (vs, _) => vs.length
   | none => 0
 
 namespace Tests.RouteTrie
