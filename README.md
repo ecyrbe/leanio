@@ -125,6 +125,12 @@ at least one binder must be a `Path` extractor.
 | `Json T` | Request body | `Content-Type: application/json` + `FromJson T` |
 | `PlainText` | Request body | `Content-Type: text/plain` |
 
+### Query extractors
+
+| Extractor | From | Description |
+|---|---|---|
+| `Query T` | Request URI query string | Deserializes query params into `T` via `FromQuery T` |
+
 ### Built-in extractors
 
 `FromRequestParts` instances for raw request metadata:
@@ -199,6 +205,27 @@ deriving FromPath
 def getComment := GET "/todos/{id}/comments/{cId}" (⟨ids⟩ : Path TodoIds) => do
     return Comment.find ids.id ids.cId
 ```
+
+#### Deserializing query params into a struct (`FromQuery`)
+
+Use `deriving FromQuery` on a structure to parse query parameters by field name.
+Fields with default values (`:=`) use that default when the key is missing.
+`Option T` fields default to `none`. Other fields produce an error if missing:
+
+```lean
+structure Pagination where
+  offset : Nat := 0
+  limit  : Nat := 10
+deriving FromQuery
+
+def listTodos := GET "/todos" (⟨page⟩ : Query Pagination) => do
+    let store ← ref.get
+    return store.todos.extract page.offset (page.offset + page.limit)
+```
+
+-- `/todos` → offset=0, limit=10 (defaults)
+-- `/todos?limit=5` → offset=0, limit=5
+-- `/todos?offset=10&limit=20` → offset=10, limit=20
 
 ### Valid parameter names
 

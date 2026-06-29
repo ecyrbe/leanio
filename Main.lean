@@ -4,6 +4,7 @@ import LeanIO.Request.FromRequestParts
 import LeanIO.Request.FromRequestBody
 import LeanIO.Response.IntoResponse
 import LeanIO.Request.DeriveFromPath
+import LeanIO.Request.DeriveFromQuery
 open Std Async
 open Std Http Server
 open LeanIO
@@ -117,9 +118,18 @@ def test: (TodoStoreRef → ContextAsync (Array Todo)) := fun (⟨ref⟩ : TodoS
     let store ← ref.get
     return store.todos.valuesArray
 
-def listTodos := GET "/todos" (⟨ref⟩ : TodoStoreRef) => do
+structure Pagination where
+  offset : Nat := 0
+  limit  : Nat := 10
+deriving FromQuery
+
+def listTodos := GET "/todos" (⟨ref⟩ : TodoStoreRef) (⟨page⟩ : Query Pagination) => do
     let store ← ref.get
-    return store.todos.valuesArray
+    let todos := store.todos.valuesArray
+    let start := min page.offset todos.size
+    let remaining := todos.size - start
+    let take := min page.limit remaining
+    return todos.extract start (start + take)
 
 def getTodoById := GET "/todos/{id}" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
     match (← ref.get).todos.get? id with
