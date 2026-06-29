@@ -109,7 +109,7 @@ def getData := GET "/data" (⟨s⟩ : AppState) => do
 ### Path parameters
 
 | Pattern | Extractor | Description |
-|---|---|---|---|
+|---|---|---|
 | `{id}` | `Path Nat` | Single typed param |
 | `{a}/{b}` | `Path (Nat × String)` | Multiple params as tuple |
 | `{a}/{b}` | `Path MyStruct` | Named params deserialized into a struct via `deriving FromPath` |
