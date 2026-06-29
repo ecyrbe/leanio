@@ -109,9 +109,10 @@ def getData := GET "/data" (⟨s⟩ : AppState) => do
 ### Path parameters
 
 | Pattern | Extractor | Description |
-|---|---|---|
+|---|---|---|---|
 | `{id}` | `Path Nat` | Single typed param |
 | `{a}/{b}` | `Path (Nat × String)` | Multiple params as tuple |
+| `{a}/{b}` | `Path MyStruct` | Named params deserialized into a struct via `deriving FromPath` |
 | `{*rest}` | `Path String` | Catch-all (must be last) |
 
 The macro enforces a compile-time check: if the pattern has path parameters,
@@ -183,6 +184,21 @@ instance : FromString Uuid where
 
 Extends `Path α` parsing for new types: `Path Uuid` works
 because `Path α` uses `FromString α` internally.
+
+#### Deserializing path params into a struct (`FromPath`)
+
+Use `deriving FromPath` on a structure to parse named path parameters
+by field name instead of by position:
+
+```lean
+structure TodoIds where
+  id  : Nat
+  cId : Nat
+deriving FromPath
+
+def getComment := GET "/todos/{id}/comments/{cId}" (⟨ids⟩ : Path TodoIds) => do
+    return Comment.find ids.id ids.cId
+```
 
 ### Valid parameter names
 

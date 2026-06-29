@@ -3,6 +3,7 @@ import LeanIO.Middlewares
 import LeanIO.Request.FromRequestParts
 import LeanIO.Request.FromRequestBody
 import LeanIO.Response.IntoResponse
+import LeanIO.Request.DeriveFromPath
 open Std Async
 open Std Http Server
 open LeanIO
@@ -156,12 +157,18 @@ def throwTest := GET "/error" => do
 -- Comment Routes
 -- ==========================================
 
+structure TodoCommentIds where
+  id: Nat
+  cId: Nat
+deriving FromPath
+
+
 def listComments := GET "/todos/{id}/comments" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Path Nat) => do
     let store ← ref.get
     let comments := store.comments.fold (init := []) fun acc (_ : Nat) (c : Comment) => if c.todoId == id then c :: acc else acc
     return comments
 
-def getComment := GET "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path (Nat × Nat)) => do
+def getComment := GET "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path TodoCommentIds) => do
     match (← ref.get).comments.get? cId with
     | some c => if c.todoId == id then return Except.ok c else return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found for Todo {id}")
     | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
@@ -187,7 +194,7 @@ def updateComment := PUT "/todos/{id}/comments/{cId}" (⟨body⟩ : Json UpdateC
         ref.set { store with comments := store.comments.insert cId updated }
         return Except.ok updated
 
-def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path (Nat × Nat)) => do
+def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path (TodoCommentIds)) => do
     let store ← ref.get
     match store.comments.get? cId with
     | some c =>

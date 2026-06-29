@@ -29,11 +29,11 @@ instance : FromRequestParts URI.Query where
 instance : FromRequestParts URI.Path where
   from_request_parts req := pure req.line.uri.path
 
-class FromHashMap (α : Type) where
-  fromHashMap : Std.HashMap String String → Except String α
+class FromPath (α : Type) where
+  fromPath : Std.HashMap String String → Except String α
 
-instance: FromHashMap (Std.HashMap String String) where
-  fromHashMap h := .ok h
+instance: FromPath (Std.HashMap String String) where
+  fromPath h := .ok h
 
 class FromString (α : Type) where
   parse: String → Except String α
@@ -60,11 +60,11 @@ instance : FromString Bool where
 structure Path (α : Type) where
   value : α
 
-instance [FromHashMap α] : FromRequestParts (Path α) where
+instance [FromPath α] : FromRequestParts (Path α) where
   from_request_parts req := do
     let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
     let params := Std.HashMap.ofList ext.params
-    let value ← FromHashMap.fromHashMap params
+    let value ← FromPath.fromPath params
     return {value}
 
 -- when only one parameter
