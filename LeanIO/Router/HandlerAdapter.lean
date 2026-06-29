@@ -96,12 +96,4 @@ instance [FromRequestParts P₁] [FromRequestParts P₂] [FromRequestParts P₃]
     | .ok part1, .ok part2, .ok part3, .ok part4 => IntoResponse.into_response <| handler part1 part2 part3 part4
     | _,_,_,_ => Response.badRequest |>.empty
 
-def test: Unit → ContextAsync String := fun (_: Unit) => do
-  discard <| Async.ofExcept (Except.ok 6)
-  if false then
-    throw <| IO.userError "oops"
-  return "hello"
-
-def testRun := HandlerAdapter.adapt test
-
 end LeanIO
