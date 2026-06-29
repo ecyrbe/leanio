@@ -19,6 +19,8 @@ def isValidParamName (s : String) : Bool :=
 /-- Validates route pattern structure: balanced braces, valid param names,
 and ensures `{*name}` rest params appear only as the last segment. -/
 def validateRoutePattern (s : String) : Except String Unit := do
+  unless s.startsWith "/" do
+    throw "route pattern must start with '/'"
   let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
   let hasRest := parts.any fun p => p.startsWith "{*" && p.endsWith "}"
   for p in parts do

@@ -161,8 +161,7 @@ def listComments := GET "/todos/{id}/comments" (⟨ref⟩ : TodoStoreRef) (⟨id
     let comments := store.comments.fold (init := []) fun acc (_ : Nat) (c : Comment) => if c.todoId == id then c :: acc else acc
     return comments
 
-def getComment := GET "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨ids⟩ : Path (Nat × Nat)) => do
-    let (id, cId) := ids
+def getComment := GET "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path (Nat × Nat)) => do
     match (← ref.get).comments.get? cId with
     | some c => if c.todoId == id then return Except.ok c else return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found for Todo {id}")
     | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
@@ -176,8 +175,7 @@ def createComment := POST "/todos/{id}/comments" (⟨body⟩ : Json CreateCommen
       nextCommentId := newId + 1 }
     return (Status.created, comment)
 
-def updateComment := PUT "/todos/{id}/comments/{cId}" (⟨body⟩ : Json UpdateCommentRequest) (⟨ref⟩ : TodoStoreRef) (⟨ids⟩ : Path (Nat × Nat)) => do
-    let (id, cId) := ids
+def updateComment := PUT "/todos/{id}/comments/{cId}" (⟨body⟩ : Json UpdateCommentRequest) (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path (Nat × Nat)) => do
     let store ← ref.get
     match store.comments.get? cId with
     | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
@@ -189,8 +187,7 @@ def updateComment := PUT "/todos/{id}/comments/{cId}" (⟨body⟩ : Json UpdateC
         ref.set { store with comments := store.comments.insert cId updated }
         return Except.ok updated
 
-def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨ids⟩ : Path (Nat × Nat)) => do
-    let (id, cId) := ids
+def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreRef) (⟨id, cId⟩ : Path (Nat × Nat)) => do
     let store ← ref.get
     match store.comments.get? cId with
     | some c =>
@@ -201,7 +198,7 @@ def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreR
     | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
 
 def anyRoute := GET "/{*rest}" (⟨rest⟩ : Path String) =>
-    pure (Status.notFound, APIError.mk "Not Found" "no matching route")
+    pure (Status.notFound, APIError.mk "Not Found" s!"no matching route for '{rest}'")
 
 -- ==========================================
 -- Router construction
