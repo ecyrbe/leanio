@@ -7,6 +7,9 @@ open Std.Http Std.Async Lean
 class IntoResponse (α : Type) where
   into_response : ContextAsync α → ContextAsync (Response Body.Any)
 
+instance : IntoResponse (Response Body.Any) where
+  into_response resp := resp
+
 instance : IntoResponse Unit where
   into_response _ := Response.ok |>.empty
 
