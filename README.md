@@ -4,7 +4,7 @@
 
 [![Lean](https://img.shields.io/badge/Lean-4.31.0-0f4c81)](https://lean-lang.org/)
 [![Lake](https://img.shields.io/badge/build-Lake-blue)](https://github.com/leanprover/lake)
-[![Version](https://img.shields.io/badge/version-0.1.0-2ea44f)](./lakefile.toml)
+[![Version](https://img.shields.io/badge/version-0.2.0-2ea44f)](./lakefile.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
 A lightweight, composable HTTP router and server toolkit for Lean 4.
