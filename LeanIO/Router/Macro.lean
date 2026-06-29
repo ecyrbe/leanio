@@ -2,7 +2,7 @@ import Lean
 import Std.Http
 import LeanIO.Router.RoutePattern
 import LeanIO.Router.Route
-import LeanIO.Router.HandlerAdapter
+import LeanIO.Router.Extractor
 
 namespace LeanIO.Router
 open Std Http Server
@@ -124,9 +124,9 @@ private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
     | [] =>
       match body with
       | `(do $_) =>
-        `(let fn (_ : Unit) : Std.Async.ContextAsync _ := $body; LeanIO.HandlerAdapter.adapt fn)
+        `(let fn (_ : Unit) : Std.Async.ContextAsync _ := $body; LeanIO.Extractor.extract fn)
       | _ =>
-        `(let fn (_ : Unit) := $body; LeanIO.HandlerAdapter.adapt fn)
+        `(let fn (_ : Unit) := $body; LeanIO.Extractor.extract fn)
     | binders =>
       let ascribedBody : Term := ← `(($body : Std.Async.ContextAsync _))
       let lam ← binders.foldrM (fun b inner => do
@@ -135,7 +135,7 @@ private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
           `(fun ($pat : $ty) => $inner)
         | _ => Macro.throwErrorAt b "invalid extractor binder"
       ) ascribedBody
-      `(let fn := $lam; LeanIO.HandlerAdapter.adapt fn)
+      `(let fn := $lam; LeanIO.Extractor.extract fn)
 
   `({ method := $methodTerm, pat := $patTerm, handler := $handler : Route })
 

@@ -41,42 +41,42 @@ PUT "/todos/{id}" (body : Json UpdateTodoRequest) (id : Path Nat) => do
 -- only 1 body allowed, it must be the first parameter
 ```
 -/
-class HandlerAdapter (Fn : Type) where
-  adapt : Fn → Router.HandlerSig
+class Extractor (Fn : Type) where
+  extract : Fn → Router.HandlerSig
 
-private class PartsAdapter (Fn : Type) where
-  adaptParts : Fn → Router.HandlerSig
+private class PartsExtractor (Fn : Type) where
+  extractParts : Fn → Router.HandlerSig
 
-instance [IntoResponse R] : HandlerAdapter (ContextAsync R) where
-  adapt handler _ := IntoResponse.into_response handler
+instance [IntoResponse R] : Extractor (ContextAsync R) where
+  extract handler _ := IntoResponse.into_response handler
 
-instance [IntoResponse R] : HandlerAdapter (Unit → R) where
-  adapt handler _ := IntoResponse.into_response <| pure (handler ())
+instance [IntoResponse R] : Extractor (Unit → R) where
+  extract handler _ := IntoResponse.into_response <| pure (handler ())
 
-instance [IntoResponse R] : HandlerAdapter (Unit → ContextAsync R) where
-  adapt handler _ := IntoResponse.into_response (handler ())
+instance [IntoResponse R] : Extractor (Unit → ContextAsync R) where
+  extract handler _ := IntoResponse.into_response (handler ())
 
-instance [FromRequestBody P] [PartsAdapter Rest] : HandlerAdapter (P → Rest) where
-  adapt handler req := do
+instance [FromRequestBody P] [PartsExtractor Rest] : Extractor (P → Rest) where
+  extract handler req := do
     match ← FromRequestBody.from_request_body (α:=P) req with
-    | .ok p => PartsAdapter.adaptParts (handler p) req
+    | .ok p => PartsExtractor.extractParts (handler p) req
     | .error e => Response.badRequest |>.text e
 
-instance [FromRequestParts P] [PartsAdapter Rest] : HandlerAdapter (P → Rest) where
-  adapt handler req := do
+instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) where
+  extract handler req := do
     match FromRequestParts.from_request_parts (α:=P) req with
-    | .ok p => PartsAdapter.adaptParts (handler p) req
+    | .ok p => PartsExtractor.extractParts (handler p) req
     | .error e => Response.badRequest |>.text e
 
 -- PartsAdapter: body already consumed. Only FromRequestParts allowed.
 
-private instance [IntoResponse R] : PartsAdapter (ContextAsync R) where
-  adaptParts handler _ := IntoResponse.into_response handler
+private instance [IntoResponse R] : PartsExtractor (ContextAsync R) where
+  extractParts handler _ := IntoResponse.into_response handler
 
-private instance [FromRequestParts P] [PartsAdapter Rest] : PartsAdapter (P → Rest) where
-  adaptParts handler req := do
+private instance [FromRequestParts P] [PartsExtractor Rest] : PartsExtractor (P → Rest) where
+  extractParts handler req := do
     match FromRequestParts.from_request_parts (α:=P) req with
-    | .ok p => PartsAdapter.adaptParts (handler p) req
+    | .ok p => PartsExtractor.extractParts (handler p) req
     | .error e => Response.badRequest |>.text e
 
 end LeanIO
