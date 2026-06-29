@@ -11,6 +11,9 @@ class HandlerAdapter (Fn : Type) where
   adapt :
     Fn → Router.HandlerSig
 
+instance [IntoResponse R]: HandlerAdapter (Unit → R) where
+  adapt handler _ := IntoResponse.into_response <| pure (handler ())
+
 instance [IntoResponse R]: HandlerAdapter (Unit → ContextAsync R) where
   adapt handler _ :=
     IntoResponse.into_response <| handler ()

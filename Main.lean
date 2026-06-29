@@ -149,7 +149,7 @@ def deleteTodo := DELETE "/todos/{id}" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Pa
       return Except.ok s!"Todo {id} deleted"
     | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Todo {id} not found")
 
-def throwTest := GET "/error" =>
+def throwTest := GET "/error" => do
     throw <| IO.userError "middleware test exception"
 
 -- ==========================================

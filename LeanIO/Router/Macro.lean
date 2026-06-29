@@ -122,7 +122,11 @@ private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
   let handler : Term ←
     match bs.toList with
     | [] =>
-      `(let fn (_ : Unit) : Std.Async.ContextAsync _ := $body; LeanIO.HandlerAdapter.adapt fn)
+      match body with
+      | `(do $_) =>
+        `(let fn (_ : Unit) : Std.Async.ContextAsync _ := $body; LeanIO.HandlerAdapter.adapt fn)
+      | _ =>
+        `(let fn (_ : Unit) := $body; LeanIO.HandlerAdapter.adapt fn)
     | binders =>
       let ascribedBody : Term := ← `(($body : Std.Async.ContextAsync _))
       let lam ← binders.foldrM (fun b inner => do
