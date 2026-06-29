@@ -9,7 +9,7 @@
 
 A lightweight, composable HTTP router and server toolkit for Lean 4.
 
-Built on `Std.Http.Server` with a custom routing DSL, path-parameter extraction,
+Built on `Std.Http.Server` with an axum-inspired extractor DSL,
 middleware chaining, and sub-router mounting under path prefixes.
 
 </div>
@@ -17,14 +17,14 @@ middleware chaining, and sub-router mounting under path prefixes.
 ## Highlights
 
 - 🧭 **Routing DSL** — term macros `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, etc.
-- 🔗 **Path parameters** — typed extraction with `{param}` syntax (`Nat`, `Int`, `String`, `Bool`, `Float`)
+- 🔗 **Path extractors** — `Path Nat`, `Path (Nat × String)`, catch-all `Path String`
+- 📦 **Body extractors** — `Json T` auto-deserializes with `FromJson`, `PlainText` for raw strings
+- 📤 **Response dispatch** — `IntoResponse` maps return types to HTTP responses (String, JSON, status codes)
 - 🌿 **Catch-all routes** — `{*rest}` captures the remainder of the path
 - 🧩 **Sub-router mounting** — merge sub-routers under a prefix via `addRouter`
 - 🧪 **Middleware chaining** — router, sub-router, and route-level middleware
-- 📦 **JSON body parsing** — automatic `FromJson` deserialization for request bodies
-- 📤 **JSON response helpers** — `Response.json`, `.created`, `.notFound`, `.badRequest`
 - ⚡ **Optimized route matching** — routes and sub-routers pre-merged for fast lookup
-- 🧪 **Tested** — unit tests + integration tests for the full CRUD API
+- 🧪 **Tested** — unit tests + 16 integration tests
 
 ## Quick Start
 
@@ -32,159 +32,221 @@ middleware chaining, and sub-router mounting under path prefixes.
 import LeanIO
 open LeanIO.Router
 
-def hello := GET "/hello" (req : Request Body.Stream) =>
-    Response.ok |>.text "Hello, world!"
+def hello := GET "/hello" =>
+    "Hello, world!"
 
 def main : IO Unit := Async.block do
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
   let router : Router := Router.empty
     |>.addRoute hello
+    |>.addMiddleware requestLogger
+    |>.addMiddleware catchErrors
   let server ← Server.serve addr router
   server.waitShutdown
 ```
 
+Handlers return plain values — `String` becomes `200 text/plain`,
+`ToJson` types become `200 application/json`, `()` becomes `204 No Content`.
+
 ## Route definitions
 
-Routes are defined with term macros. Each expands to a `Route` value — they can be
-named or inlined directly into a router:
+Routes are defined with term macros. Bind parameters with `(⟨pat⟩ : Extractor)`:
 
 ```lean
-def listItems := GET "/items" (req : Request Body.Stream) =>
-    -- raw stream body access
+-- plain handler — returns a String
+def hello := GET "/hello" =>
+    "Hello, world!"
 
-def createItem := POST "/items" (req : Request CreateItemRequest) =>
-    -- req.body auto-parsed from JSON as CreateItemRequest
+-- path parameter extraction
+def getItem := GET "/items/{id}" (⟨id⟩ : Path Nat) => do
+    return someItemDb.find id
 
-def getItem := GET "/items/{id}" (req : Request Body.Stream) (id : Nat) =>
-    -- id extracted from the path and parsed as Nat
+-- JSON body extraction
+def createItem := POST "/items" (⟨body⟩ : Json CreateItemRequest) => do
+    return (Status.created, Item.of body)
 
-def updateItem := PUT "/items/{id}" (req : Request UpdateItemRequest) (id : Nat) =>
-    -- both path params and JSON body parsing
+-- combined: body + path params
+def updateItem := PUT "/items/{id}" (⟨body⟩ : Json UpdateRequest) (⟨id⟩ : Path Nat) => do
+    return Item.update id body
 
-def serveFiles := GET "/files/{*rest}" (req : Request Body.Stream) (rest : String) =>
-    -- rest captures everything after /files/ as a single string
+-- two path params
+def getComment := GET "/items/{id}/comments/{cId}" (⟨id, cId⟩ : Path (Nat × Nat)) => do
+    return Comment.find id cId
+
+-- catch-all rest param
+def serveFiles := GET "/files/{*rest}" (⟨rest⟩ : Path String) =>
+    File.serve rest
 ```
 
-`Request Body.Stream` keeps the request body raw. `Request T` where `T` derives
-`FromJson` auto-deserializes the body and returns `400 Bad Request` on failure.
+Handlers run in `ContextAsync` — use `do` for async operations.
 
-### Runtime construction
+### Custom state extractors
 
-When the handler is pre-built and no macro-time processing is needed:
+Inject middleware state and extract it with `FromRequestParts`:
 
 ```lean
-def myHandler : HandlerSig := fun req => do
-  let params := (req.extensions.get LeanIO.Router.RouteParams).getD { params := ∅ }
-  let id := params.params.getD "id" "unknown"
-  Response.ok |>.text s!"user {id}"
+structure AppState where
+  ref : IO.Ref Db
+deriving TypeName
 
-def myRoute : Route := Route.new .get "/user/{id}" myHandler
+instance : FromRequestParts AppState where
+  from_request_parts req :=
+    match req.extensions.get AppState with
+    | some s => .ok s
+    | none   => .error "app state not installed"
+
+def stateMiddleware := do
+  let ref ← IO.mkRef defaultDb
+  return withExtension AppState { ref }
+
+def getData := GET "/data" (⟨s⟩ : AppState) => do
+    let db ← s.ref.get
+    return db.items
 ```
 
-Prefer the term macros — they validate patterns and extract params at compile time.
+## Extractors
 
-## JSON Serialization
+### Path parameters
 
-### Defining request and response types
+| Pattern | Extractor | Description |
+|---|---|---|
+| `{id}` | `Path Nat` | Single typed param |
+| `{a}/{b}` | `Path (Nat × String)` | Multiple params as tuple |
+| `{*rest}` | `Path String` | Catch-all (must be last) |
 
-LeanIO uses Lean's `FromJson` and `ToJson` typeclasses for automatic JSON handling.
+The macro enforces a compile-time check: if the pattern has path parameters,
+at least one binder must be a `Path` extractor.
+
+### Body extractors
+
+| Extractor | From | Validates |
+|---|---|---|
+| `Json T` | Request body | `Content-Type: application/json` + `FromJson T` |
+| `PlainText` | Request body | `Content-Type: text/plain` |
+
+### Built-in extractors
+
+`FromRequestParts` instances for raw request metadata:
+
+- `Method` — HTTP method (`GET`, `POST`, ...)
+- `Version` — HTTP version
+- `Headers` — request headers
+- `URI.Path` — request path
+- `URI.Query` — query string
+- `RequestTarget` — full request URI
+
+### Custom extractors
+
+#### From request parts (sync)
 
 ```lean
-structure CreateUserRequest where
-  name  : String
-  email : String
-  age   : Nat
-deriving FromJson
+class FromRequestParts (α : Type) where
+  from_request_parts : Request Body.Stream → Except String α
 
-structure UserResponse where
-  id    : Nat
-  name  : String
-  email : String
-  age   : Nat
-deriving ToJson
+instance : FromRequestParts ApiKey where
+  from_request_parts req :=
+    match req.line.headers.find? (mk "x-api-key") with
+    | some (_, v) => .ok { key := v }
+    | none         => .error "missing api key"
 ```
 
-### Receiving JSON in request bodies
+Use in handler: `(⟨key⟩ : ApiKey)`.
+
+#### From request body (async)
 
 ```lean
-def createUser := POST "/users" (req : Request CreateUserRequest) => do
-    let name  := req.body.name
-    let email := req.body.email
-    Response.json s!"created user {name}"
+class FromRequestBody (α : Type) where
+  from_request_body : Request Body.Stream → ContextAsync (Except String α)
+
+structure Xml (α : Type) where
+  body : α
+
+instance [FromXml α] : FromRequestBody (Xml α) where
+  from_request_body req := do
+    let raw ← req.body.readAll
+    match Xml.parse raw with
+    | .ok v => return .ok { body := v }
+    | .error e => return .error e
 ```
 
-Malformed JSON returns `400 Bad Request` automatically.
+Use in handler: `(⟨body⟩ : Xml T)`.
 
-### Sending JSON in responses
+#### From string values (param parsing)
 
 ```lean
-def getUser := GET "/users/{id}" (req : Request Body.Stream) (id : Nat) =>
-    let user : UserResponse := { id, name := "Alice", email := "a@b.com", age := 30 }
-    Response.json user
+class FromString (α : Type) where
+  parse : String → Except String α
+
+instance : FromString Uuid where
+  parse s := ...
 ```
 
-Status helpers:
+Extends `Path α` parsing for new types: `Path Uuid` works
+because `Path α` uses `FromString α` internally.
+
+### Valid parameter names
+
+Param names must start with a letter or `_` and contain only
+alphanumeric characters or `_`. The pattern must start with `/`.
 
 ```lean
-Response.json user              -- 200 OK
-Response.json.created user      -- 201 Created
-Response.json.badRequest msg    -- 400 Bad Request
-Response.json.notFound msg      -- 404 Not Found
+-- ✓ valid
+GET "/user/{id}" ...
+GET "/files/{*path}" ...
+GET "/posts/{year}/{month}" ...
+
+-- ✗ invalid — caught at compile time
+GET "user/{id}" ...        -- no leading /
+GET "/items/{*rest}/x" ... -- rest must be last
+GET "/user/{1bad}" ...     -- param name starts with digit
 ```
 
-### Full JSON CRUD example
+## Responses
+
+Return type | HTTP response
+---|---
+`String` | `200` text/plain
+`Unit` / `()` | `200` empty body
+`T` (with `ToJson T`) | `200` application/json
+`Status × T` (with `ToJson T`) | given status + JSON body
+`Except E T` | `.ok` → `IntoResponse T`, `.error` → `IntoResponse E`
+`IO.Error` | `500` Internal Server Error
 
 ```lean
-import LeanIO.Router
-open LeanIO.Router
+def created  := POST "/items" (⟨body⟩ : Json Item) => do
+    let item ← Item.create body
+    return (Status.created, item)    -- 201 Created + JSON
 
-structure Pet where
-  id   : Nat
-  name : String
-deriving ToJson
+def notFound := GET "/items/{id}" (⟨id⟩ : Path Nat) => do
+    match ← Item.find? id with
+    | some item => return Except.ok item
+    | none      => return Except.error (Status.notFound, ApiError.mk "not found")
 
-structure CreatePetRequest where
-  name : String
-deriving FromJson
+def deleted  := DELETE "/items/{id}" (⟨id⟩ : Path Nat) => do
+    Item.delete id
+    return s!"Item {id} deleted"     -- 200 text/plain
 
-def listPets := GET "/pets" (req : Request Body.Stream) =>
-    Response.json #[Pet.mk 1 "Fluffy", Pet.mk 2 "Spot"]
-
-def createPet := POST "/pets" (req : Request CreatePetRequest) =>
-    let pet := Pet.mk 3 req.body.name
-    Response.json.created pet
-
-def updatePet := PUT "/pets/{id}" (req : Request CreatePetRequest) (id : Nat) =>
-    let updated := Pet.mk id req.body.name
-    Response.json updated
-
-def deletePet := DELETE "/pets/{id}" (req : Request Body.Stream) (id : Nat) =>
-    Response.ok |>.text s!"pet {id} deleted"
+def oops     := GET "/boom" =>
+    throw <| IO.userError "bad"      -- 500 Internal Server Error
 ```
 
-## Router composition
+### Custom responses
 
-Sub-routers are merged into the parent at construction time — each route's pattern
-gets the mount prefix prepended. All dispatch is a single lookup.
+Implement `IntoResponse` for your type:
 
 ```lean
-def apiV1 : Router := Router.empty
-  |>.addRoute listItems
-  |>.addRoute createItem
-  |>.addMiddleware apiAuth
+class IntoResponse (α : Type) where
+  into_response : ContextAsync α → ContextAsync (Response Body.Any)
 
-def root : Router := Router.empty
-  |>.addRouter "/api/v1" apiV1    -- merged into root with prefix prepended
-  |>.addMiddleware requestLogger
+instance : IntoResponse Html where
+  into_response html := do
+    let h ← html
+    Response.ok
+      |>.header (.mk "content-type") (.mk "text/html")
+      |>.text (Html.render h)
 ```
 
-Routes can also be inlined:
-
-```lean
-def apiV1 : Router := Router.empty
-  |>.addRoute (GET "/hello" (req : Request Body.Stream) => Response.ok |>.text "hi")
-  |>.addRoute (POST "/echo" (req : Request CreatePetRequest) => Response.json req.body)
-```
+Then handlers can return `Html` directly.
 
 ## Middleware
 
@@ -236,31 +298,39 @@ sequenceDiagram
   RL-->>Client: response
 ```
 
-State injection via extensions:
+Built-in middlewares:
+
+| Middleware | Description |
+|---|---|
+| `requestLogger` | Logs method, path, and response time |
+| `catchErrors` | Catches exceptions, returns 500 (customizable) |
+| `auth` | Basic or bearer token authentication |
+| `withExtension` | Inject state into extension |
+
+## Router composition
+
+Sub-routers are merged into the parent at construction time — each route's pattern
+gets the mount prefix prepended. All dispatch is a single lookup.
 
 ```lean
-structure AppState where
-  ref : IO.Ref MyData
-deriving TypeName
+def apiV1 : Router := Router.empty
+  |>.addRoute listItems
+  |>.addRoute createItem
+  |>.addMiddleware apiAuth
 
-def stateMiddleware := do
-  let ref ← IO.mkRef { ... }
-  return withExtension AppState { ref }
-
-let router := rootRouter
-  |>.addMiddleware (← stateMiddleware)
+def root : Router := Router.empty
+  |>.addRouter "/api/v1" apiV1    -- merged into root with prefix prepended
+  |>.addMiddleware requestLogger
 ```
 
-Extract in handlers:
+Routes can also be inlined:
 
 ```lean
-def getData := GET "/data" (req : Request Body.Stream) => do
-    match req.extensions.get AppState with
-    | some state => do
-      let data ← state.ref.get
-      Response.json data
-    | none => Response.internalServerError |>.text "no state"
+def apiV1 : Router := Router.empty
+  |>.addRoute (GET "/hello" => "hi")
+  |>.addRoute (POST "/echo" (⟨body⟩ : Json Pet) => return body)
 ```
+
 ## Requirements
 
 - Lean `4.31.0`
