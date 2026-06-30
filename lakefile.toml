@@ -13,8 +13,8 @@ srcDir = "Examples"
 
 [[lean_exe]]
 name = "leanplay"
-root = "LeanPlay"
-srcDir = "Examples"
+root = "Main"
+srcDir = "Examples/LeanPlay"
 
 [[lean_lib]]
 name = "Tests"

@@ -44,8 +44,10 @@ instance : FromRequestParts CommentStore where
     | some s => .ok s
     | none => .error "comment store not installed"
 
+private def staticDir : System.FilePath := "Examples/LeanPlay/static"
+
 def listVideos := GET "/videos" => do
-  let entries : Array IO.FS.DirEntry ← System.FilePath.readDir "static/media"
+  let entries : Array IO.FS.DirEntry ← System.FilePath.readDir (staticDir / "media")
   let mut videos := #[]
   for entry in entries do
     let path := entry.path
@@ -67,11 +69,11 @@ def postComment := POST "/videos/{name}/comments"
   return (Status.created, comment)
 
 def index := GET "/" (ranges : HeaderRange) => do
-  return { path := "static/index.html", ranges : RangeFile }
+  return { path := staticDir / "index.html", ranges : RangeFile }
 
 def serveStatic := GET "/{*rest}" (⟨_⟩ : Path String) (ranges : HeaderRange) (p : URI.Path) => do
   let decoded := String.intercalate "/" (p.toDecodedSegments.toList)
-  return { path := "static" / decoded, ranges : RangeFile }
+  return { path := staticDir / decoded, ranges : RangeFile }
 
 def main : IO Unit := Async.block do
   let apiRouter : Router := Router.empty
