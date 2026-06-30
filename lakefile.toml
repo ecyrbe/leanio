@@ -11,6 +11,11 @@ name = "todos"
 root = "Todos"
 srcDir = "Examples"
 
+[[lean_exe]]
+name = "leanplay"
+root = "LeanPlay"
+srcDir = "Examples"
+
 [[lean_lib]]
 name = "Tests"
 globs = ["Tests.+"]

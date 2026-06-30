@@ -1,4 +1,4 @@
 /.lake
 *.json
 *.sh
-static/
+media/
