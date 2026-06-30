@@ -1,258 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LeanPlay</title>
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0f0f0f;--bg2:#1a1a1a;--bg3:#272727;--text:#f1f1f1;--text2:#aaa;--red:#f44;--accent:#3ea6ff}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
-a{color:inherit;text-decoration:none}
-
-header{position:sticky;top:0;z-index:100;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid #333}
-.logo{display:flex;align-items:center;gap:8px;cursor:pointer}
-.logo svg{width:32px;height:32px}
-.logo span{font-size:22px;font-weight:700}
-.logo span b{color:var(--red)}
-.search{display:flex;flex:0 1 640px;margin:0 40px}
-.search input{flex:1;background:var(--bg2);border:1px solid #333;border-right:none;color:var(--text);padding:0 16px;height:40px;border-radius:20px 0 0 20px;font-size:15px;outline:none}
-.search input:focus{border-color:#1c62b9}
-.search button{background:var(--bg3);border:1px solid #333;border-left:none;padding:0 20px;border-radius:0 20px 20px 0;cursor:pointer;color:var(--text)}
-.search button:hover{background:#3a3a3a}
-.avatar{width:32px;height:32px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
-
-.main-layout{display:flex;max-width:1800px;margin:0 auto}
-.sidebar{width:200px;padding:12px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;flex-shrink:0}
-.sidebar-item{display:flex;align-items:center;gap:16px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:14px;color:var(--text);transition:background .1s}
-.sidebar-item:hover{background:var(--bg3)}
-.sidebar-item.active{background:var(--bg3);font-weight:500}
-.sidebar-item svg{width:22px;height:22px;flex-shrink:0}
-.sidebar hr{border:none;border-top:1px solid #333;margin:12px 0}
-
-.content{flex:1;padding:24px;min-width:0}
-.content h2{font-size:20px;margin-bottom:20px}
-.video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
-.video-card{cursor:pointer;transition:transform .1s}
-.video-card:hover{transform:scale(1.02)}
-.thumbnail{position:relative;aspect-ratio:16/9;background:var(--bg3);border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.thumbnail .play-icon{width:56px;height:56px;border-radius:50%;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;opacity:.9;transition:opacity .15s}
-.thumbnail .play-icon svg{width:24px;height:24px;fill:#fff}
-.thumbnail .duration{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.8);color:#fff;font-size:12px;padding:3px 6px;border-radius:4px;font-weight:500}
-.video-meta{display:flex;gap:12px;padding:12px 4px 0}
-.video-meta .avatar-sm{width:36px;height:36px;border-radius:50%;background:var(--red);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px}
-.video-info{flex:1;min-width:0}
-.video-title{font-weight:500;font-size:15px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
-.video-chan{font-size:13px;color:var(--text2)}
-.video-stats{font-size:13px;color:var(--text2)}
-
-.player-page{display:none}
-.player-page.active{display:block}
-.player-page .back-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;cursor:pointer;color:var(--text);font-size:14px;margin-bottom:16px;transition:background .1s}
-.player-page .back-btn:hover{background:var(--bg3)}
-.player-page .back-btn svg{width:18px;height:18px}
-.player-wrapper{display:flex;gap:24px;flex-wrap:wrap}
-.player-main{flex:1;min-width:0}
-.player-main video{width:100%;border-radius:12px;background:#000;max-height:70vh}
-.video-details{padding:12px 4px}
-.video-details h1{font-size:20px;font-weight:600;margin-bottom:8px}
-.video-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-.video-actions button{display:flex;align-items:center;gap:6px;background:var(--bg3);color:var(--text);border:none;padding:8px 16px;border-radius:20px;cursor:pointer;font-size:14px;transition:background .1s}
-.video-actions button:hover{background:#3a3a3a}
-.video-actions button.liked{color:var(--accent)}
-.video-desc{background:var(--bg3);border-radius:12px;padding:16px;font-size:14px;line-height:1.6;white-space:pre-wrap;margin-bottom:24px}
-.comments h2{font-size:17px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
-.comment{display:flex;gap:12px;margin-bottom:16px}
-.comment .avatar-sm{flex-shrink:0;margin-top:2px}
-.comment-body{font-size:14px}
-.comment-body .author{font-size:13px;font-weight:500;margin-bottom:4px}
-.comment-body .text{line-height:1.5}
-.side-videos{width:360px;flex-shrink:0}
-.side-videos .mini-card{display:flex;gap:8px;cursor:pointer;margin-bottom:12px;border-radius:8px;padding:4px;transition:background .1s}
-.side-videos .mini-card:hover{background:var(--bg3)}
-.side-videos .mini-thumb{width:168px;aspect-ratio:16/9;background:var(--bg3);border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:28px}
-.side-videos .mini-info{flex:1;min-width:0}
-.side-videos .mini-title{font-size:14px;font-weight:500;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
-.side-videos .mini-meta{font-size:12px;color:var(--text2)}
-
-.empty{text-align:center;padding:80px 20px;color:var(--text2);font-size:16px}
-.empty svg{width:64px;height:64px;margin-bottom:16px;opacity:.3}
-.loading{text-align:center;padding:80px 20px;color:var(--text2)}
-
-@media(max-width:900px){.sidebar{display:none}.side-videos{display:none}.player-wrapper{flex-direction:column}}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeanPlay</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
+
 <body>
 
-<header>
-  <div class="logo" onclick="goHome()">
-    <svg viewBox="0 0 32 32"><rect x="2" y="6" width="28" height="20" rx="4" fill="var(--red)"/><polygon points="13,11 13,21 22,16" fill="#fff"/></svg>
-    <span>Lean<b>Play</b></span>
-  </div>
-  <div class="search">
-    <input type="text" id="searchInput" placeholder="Search" onkeydown="if(event.key==='Enter')filter()">
-    <button onclick="filter()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-  </div>
-  <div class="avatar">L</div>
-</header>
-
-<div class="main-layout">
-  <aside class="sidebar">
-    <div class="sidebar-item active" onclick="goHome()">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
-      Home
+  <header>
+    <div class="logo" onclick="goHome()">
+      <svg viewBox="0 0 32 32">
+        <rect x="2" y="6" width="28" height="20" rx="4" fill="var(--red)" />
+        <polygon points="13,11 13,21 22,16" fill="#fff" />
+      </svg>
+      <span>Lean<b>Play</b></span>
     </div>
-    <div class="sidebar-item" onclick="goHome()">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 7V4h2V2H4v2h2v3H2v14h20V7h-4zM8 4h8v3H8V4zm10 15H6V9h12v10z"/></svg>
-      Library
+    <div class="search">
+      <input type="text" id="searchInput" placeholder="Search" onkeydown="if(event.key==='Enter')filter()">
+      <button onclick="filter()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg></button>
     </div>
-    <hr>
-    <div class="sidebar-item" onclick="goHome()">
-      <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16"/></svg>
-      Videos
-    </div>
-  </aside>
-  <div class="content" id="app">
-    <div class="loading">Loading videos...</div>
-  </div>
-</div>
+    <div class="avatar">L</div>
+  </header>
 
-<script>
-let allVideos = [];
-
-async function init() {
-  try {
-    const res = await fetch('/api/v1/videos');
-    allVideos = await res.json();
-    renderGrid(allVideos);
-  } catch(e) {
-    document.getElementById('app').innerHTML = '<div class="empty">Failed to load videos.</div>';
-  }
-}
-
-function renderGrid(videos) {
-  const app = document.getElementById('app');
-  if (!videos.length) {
-    app.innerHTML = `<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><polygon points="9,7 9,17 17,12"/></svg><br>No videos yet.<br>Add .mp4 files to static/media/</div>`;
-    return;
-  }
-  let html = '<h2>Library</h2><div class="video-grid">';
-  for (const v of videos) {
-    html += `
-      <div class="video-card" onclick="openPlayer('${esc(v.url)}','${esc(v.name)}')">
-        <div class="thumbnail">
-          <div class="play-icon"><svg viewBox="0 0 24 24"><polygon points="8,5 19,12 8,19"/></svg></div>
-        </div>
-        <div class="video-meta">
-          <div class="avatar-sm">L</div>
-          <div class="video-info">
-            <div class="video-title">${esc(v.name)}</div>
-            <div class="video-chan">LeanPlay</div>
-            <div class="video-stats">${sizeStr(v.size)}</div>
-          </div>
-        </div>
-      </div>`;
-  }
-  html += '</div>';
-  app.innerHTML = html;
-}
-
-function openPlayer(url, name) {
-  const app = document.getElementById('app');
-  app.innerHTML = `
-    <div class="player-page active">
-      <div class="back-btn" onclick="goHome()"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg> Back</div>
-      <div class="player-wrapper">
-        <div class="player-main">
-          <video src="${esc(url)}" controls autoplay></video>
-          <div class="video-details">
-            <h1>${esc(name)}</h1>
-            <div class="video-actions">
-              <button onclick="this.classList.toggle('liked')">👍 Like</button>
-              <button>👎</button>
-              <button>↗ Share</button>
-              <button>💾 Save</button>
-            </div>
-            <div class="video-desc">${esc(name)}<br><br>Streamed with LeanPlay — a Lean 4 web server with HTTP Range support. Built with LeanIO.</div>
-            <div class="comments" id="commentsArea">
-              <h2>💬 Comments</h2>
-              <div style="display:flex;gap:8px;margin-bottom:20px" id="commentForm">
-                <input placeholder="Your name" id="cmtAuthor" style="background:var(--bg2);border:1px solid #333;color:var(--text);padding:8px 12px;border-radius:8px;font-size:14px;width:120px">
-                <input placeholder="Add a comment..." id="cmtText" style="flex:1;background:var(--bg2);border:1px solid #333;color:var(--text);padding:8px 12px;border-radius:8px;font-size:14px">
-                <button onclick="postComment('${esc(name)}')" style="background:var(--accent);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:500;font-size:14px">Post</button>
-              </div>
-              <div id="commentsList">Loading comments...</div>
-            </div>
-          </div>
-        </div>
-        <div class="side-videos" id="sideVideos"></div>
+  <div class="main-layout">
+    <aside class="sidebar">
+      <div class="sidebar-item active" onclick="goHome()">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+        </svg>
+        Home
       </div>
-    </div>`;
-  renderSidebar(url);
-  loadComments(name);
-}
+      <div class="sidebar-item" onclick="goHome()">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18 7V4h2V2H4v2h2v3H2v14h20V7h-4zM8 4h8v3H8V4zm10 15H6V9h12v10z" />
+        </svg>
+        Library
+      </div>
+      <hr>
+      <div class="sidebar-item" onclick="goHome()">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="10" />
+          <polygon points="10,8 16,12 10,16" />
+        </svg>
+        Videos
+      </div>
+    </aside>
+    <div class="content" id="app">
+      <div class="loading">Loading videos...</div>
+    </div>
+  </div>
 
-function renderSidebar(currentUrl) {
-  const others = allVideos.filter(v => !currentUrl.endsWith(v.url));
-  let html = '';
-  for (const v of others.slice(0, 10)) {
-    html += `
-      <div class="mini-card" onclick="openPlayer('${esc(v.url)}','${esc(v.name)}')">
-        <div class="mini-thumb">▶</div>
-        <div class="mini-info">
-          <div class="mini-title">${esc(v.name)}</div>
-          <div class="mini-meta">LeanPlay · ${sizeStr(v.size)}</div>
-        </div>
-      </div>`;
-  }
-  document.getElementById('sideVideos').innerHTML = html || '<div style="color:var(--text2);padding:20px">No more videos</div>';
-}
-
-function goHome() { renderGrid(allVideos); }
-
-function filter() {
-  const q = document.getElementById('searchInput').value.toLowerCase();
-  renderGrid(q ? allVideos.filter(v => v.name.toLowerCase().includes(q)) : allVideos);
-}
-
-async function loadComments(videoName) {
-  try {
-    const res = await fetch(`/api/v1/videos/${encodeURIComponent(videoName)}/comments`);
-    const comments = await res.json();
-    const list = document.getElementById('commentsList');
-    if (!comments.length) { list.innerHTML = '<div style="color:var(--text2);padding:8px 0">No comments yet.</div>'; return; }
-    list.innerHTML = comments.map(c =>
-      `<div class="comment"><div class="avatar-sm">${esc(c.author[0] || '?')}</div><div class="comment-body"><div class="author">@${esc(c.author)}</div><div class="text">${esc(c.text)}</div></div></div>`
-    ).join('');
-  } catch(e) { document.getElementById('commentsList').textContent = 'Failed to load comments.'; }
-}
-
-async function postComment(videoName) {
-  const author = document.getElementById('cmtAuthor').value.trim();
-  const text = document.getElementById('cmtText').value.trim();
-  if (!author || !text) return;
-  try {
-    await fetch(`/api/v1/videos/${encodeURIComponent(videoName)}/comments`, {
-      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({author,text})
-    });
-    document.getElementById('cmtAuthor').value = '';
-    document.getElementById('cmtText').value = '';
-    loadComments(videoName);
-  } catch(e) { alert('Failed to post comment.'); }
-}
-
-function sizeStr(s) {
-  if (!s) return '';
-  const b = Number(s);
-  if (b < 1000) return b + ' B';
-  if (b < 1e6) return (b / 1e3).toFixed(1) + ' KB';
-  if (b < 1e9) return (b / 1e6).toFixed(1) + ' MB';
-  return (b / 1e9).toFixed(1) + ' GB';
-}
-
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-
-init();
-</script>
+  <script src="/script.js"></script>
 </body>
+
 </html>

@@ -1,0 +1,488 @@
+*,
+*::before,
+*::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box
+}
+
+:root {
+    --bg: #0f0f0f;
+    --bg2: #1a1a1a;
+    --bg3: #272727;
+    --text: #f1f1f1;
+    --text2: #aaa;
+    --red: #f44;
+    --accent: #3ea6ff
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden
+}
+
+a {
+    color: inherit;
+    text-decoration: none
+}
+
+header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    border-bottom: 1px solid #333
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer
+}
+
+.logo svg {
+    width: 32px;
+    height: 32px
+}
+
+.logo span {
+    font-size: 22px;
+    font-weight: 700
+}
+
+.logo span b {
+    color: var(--red)
+}
+
+.search {
+    display: flex;
+    flex: 0 1 640px;
+    margin: 0 40px
+}
+
+.search input {
+    flex: 1;
+    background: var(--bg2);
+    border: 1px solid #333;
+    border-right: none;
+    color: var(--text);
+    padding: 0 16px;
+    height: 40px;
+    border-radius: 20px 0 0 20px;
+    font-size: 15px;
+    outline: none
+}
+
+.search input:focus {
+    border-color: #1c62b9
+}
+
+.search button {
+    background: var(--bg3);
+    border: 1px solid #333;
+    border-left: none;
+    padding: 0 20px;
+    border-radius: 0 20px 20px 0;
+    cursor: pointer;
+    color: var(--text)
+}
+
+.search button:hover {
+    background: #3a3a3a
+}
+
+.avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--red);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px
+}
+
+.main-layout {
+    display: flex;
+    max-width: 1800px;
+    margin: 0 auto
+}
+
+.sidebar {
+    width: 200px;
+    padding: 12px;
+    position: sticky;
+    top: 56px;
+    height: calc(100vh - 56px);
+    overflow-y: auto;
+    flex-shrink: 0
+}
+
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text);
+    transition: background .1s
+}
+
+.sidebar-item:hover {
+    background: var(--bg3)
+}
+
+.sidebar-item.active {
+    background: var(--bg3);
+    font-weight: 500
+}
+
+.sidebar-item svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0
+}
+
+.sidebar hr {
+    border: none;
+    border-top: 1px solid #333;
+    margin: 12px 0
+}
+
+.content {
+    flex: 1;
+    padding: 24px;
+    min-width: 0
+}
+
+.content h2 {
+    font-size: 20px;
+    margin-bottom: 20px
+}
+
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px
+}
+
+.video-card {
+    cursor: pointer;
+    transition: transform .1s
+}
+
+.video-card:hover {
+    transform: scale(1.02)
+}
+
+.thumbnail {
+    position: relative;
+    aspect-ratio: 16/9;
+    background: var(--bg3);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center
+}
+
+.thumbnail .play-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: .9;
+    transition: opacity .15s
+}
+
+.thumbnail .play-icon svg {
+    width: 24px;
+    height: 24px;
+    fill: #fff
+}
+
+.thumbnail .duration {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    background: rgba(0, 0, 0, .8);
+    color: #fff;
+    font-size: 12px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-weight: 500
+}
+
+.video-meta {
+    display: flex;
+    gap: 12px;
+    padding: 12px 4px 0
+}
+
+.video-meta .avatar-sm {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--red);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px
+}
+
+.video-info {
+    flex: 1;
+    min-width: 0
+}
+
+.video-title {
+    font-weight: 500;
+    font-size: 15px;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 4px
+}
+
+.video-chan {
+    font-size: 13px;
+    color: var(--text2)
+}
+
+.video-stats {
+    font-size: 13px;
+    color: var(--text2)
+}
+
+.player-page {
+    display: none
+}
+
+.player-page.active {
+    display: block
+}
+
+.player-page .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    color: var(--text);
+    font-size: 14px;
+    margin-bottom: 16px;
+    transition: background .1s
+}
+
+.player-page .back-btn:hover {
+    background: var(--bg3)
+}
+
+.player-page .back-btn svg {
+    width: 18px;
+    height: 18px
+}
+
+.player-wrapper {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap
+}
+
+.player-main {
+    flex: 1;
+    min-width: 0
+}
+
+.player-main video {
+    width: 100%;
+    border-radius: 12px;
+    background: #000;
+    max-height: 70vh
+}
+
+.video-details {
+    padding: 12px 4px
+}
+
+.video-details h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 8px
+}
+
+.video-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px
+}
+
+.video-actions button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg3);
+    color: var(--text);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background .1s
+}
+
+.video-actions button:hover {
+    background: #3a3a3a
+}
+
+.video-actions button.liked {
+    color: var(--accent)
+}
+
+.video-desc {
+    background: var(--bg3);
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin-bottom: 24px
+}
+
+.comments h2 {
+    font-size: 17px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px
+}
+
+.comment {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px
+}
+
+.comment .avatar-sm {
+    flex-shrink: 0;
+    margin-top: 2px
+}
+
+.comment-body {
+    font-size: 14px
+}
+
+.comment-body .author {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px
+}
+
+.comment-body .text {
+    line-height: 1.5
+}
+
+.side-videos {
+    width: 360px;
+    flex-shrink: 0
+}
+
+.side-videos .mini-card {
+    display: flex;
+    gap: 8px;
+    cursor: pointer;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    padding: 4px;
+    transition: background .1s
+}
+
+.side-videos .mini-card:hover {
+    background: var(--bg3)
+}
+
+.side-videos .mini-thumb {
+    width: 168px;
+    aspect-ratio: 16/9;
+    background: var(--bg3);
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px
+}
+
+.side-videos .mini-info {
+    flex: 1;
+    min-width: 0
+}
+
+.side-videos .mini-title {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 4px
+}
+
+.side-videos .mini-meta {
+    font-size: 12px;
+    color: var(--text2)
+}
+
+.empty {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text2);
+    font-size: 16px
+}
+
+.empty svg {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 16px;
+    opacity: .3
+}
+
+.loading {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text2)
+}
+
+@media(max-width:900px) {
+    .sidebar {
+        display: none
+    }
+
+    .side-videos {
+        display: none
+    }
+
+    .player-wrapper {
+        flex-direction: column
+    }
+}
