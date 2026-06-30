@@ -102,39 +102,51 @@ private def pickRange (ranges : HeaderRange) (fileSize : Nat) : Option (Nat × N
       some (start, len)
     else none
 
-private def sendRangeStream (content : ByteArray) (start len : Nat) (stream : Body.Stream) : Async Unit := do
-  stream.setKnownSize (some (.fixed len))
-  let mut pos := start
-  let mut remaining := len
-  while remaining > 0 do
-    let n := min chunkSize remaining
-    stream.send { data := content.extract pos (pos + n) }
-    pos := pos + n
-    remaining := remaining - n
-  stream.close
+private def sendRangeStream (handle : IO.FS.Handle) (knownLen : Nat) (stream : Body.Stream) : Async Unit := do
+  try
+    let s := IO.FS.Stream.ofHandle handle
+    stream.setKnownSize (some (.fixed knownLen))
+    let mut remaining := knownLen
+    while remaining > 0 do
+      let n := min chunkSize remaining
+      let bytes ← s.read (USize.ofNat n)
+      if bytes.isEmpty then break
+      stream.send { data := bytes }
+      remaining := remaining - bytes.size
+  finally
+    stream.close
+
+private def skipBytes (handle : IO.FS.Handle) (n : Nat) : IO Unit := do
+  let mut skipped := 0
+  while skipped < n do
+    let bytes ← handle.read (USize.ofNat (min chunkSize (n - skipped)))
+    if bytes.isEmpty then break
+    skipped := skipped + bytes.size
 
 instance : IntoResponse RangeFile where
   into_response f := do
     let file ← f
-    let content ← IO.FS.readBinFile file.path
-    let fileSize := content.size
+    let mdata ← file.path.metadata
+    let fileSize := mdata.byteSize.toNat
+    let handle ← IO.FS.Handle.mk file.path .read
     match pickRange file.ranges fileSize with
     | none =>
       Response.ok
         |>.header headerContentType (mimeType file.path)
         |>.header headerAcceptRanges headerBytes
-        |>.stream (sendRangeStream content 0 fileSize)
+        |>.stream (sendRangeStream handle fileSize)
     | some (start, len) =>
       if start >= fileSize then
         Response.new.status .rangeNotSatisfiable
-          |>.header! "content-range" s!"bytes */{fileSize}"
+          |>.header! "content-range" s!"bytes */{mdata.byteSize}"
           |>.empty
       else
+        skipBytes handle start
         let endByte := start + len - 1
         Response.new.status .partialContent
           |>.header headerContentType (mimeType file.path)
           |>.header headerAcceptRanges headerBytes
-          |>.header! "content-range" s!"bytes {start}-{endByte}/{fileSize}"
-          |>.stream (sendRangeStream content start len)
+          |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
+          |>.stream (sendRangeStream handle len)
 
 end LeanIO
