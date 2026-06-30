@@ -1,14 +1,15 @@
 name = "leanio"
 version = "0.2.0"
-defaultTargets = ["leanio"]
+defaultTargets = ["LeanIO"]
 testDriver = "Tests"
 
 [[lean_lib]]
 name = "LeanIO"
 
 [[lean_exe]]
-name = "leanio"
-root = "Main"
+name = "todos"
+root = "Todos"
+srcDir = "Examples"
 
 [[lean_lib]]
 name = "Tests"

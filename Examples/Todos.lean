@@ -5,7 +5,6 @@ import LeanIO.Request.FromRequestBody
 import LeanIO.Response.IntoResponse
 import LeanIO.Request.DeriveFromPath
 import LeanIO.Request.DeriveFromQuery
-import LeanIO.Response.RangeFile
 open Std Async
 open Std Http Server
 open LeanIO
@@ -218,10 +217,6 @@ def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreR
 def anyRoute := GET "/{*rest}" (⟨rest⟩ : Path String) =>
     pure (Status.notFound, APIError.mk "Not Found" s!"no matching route for '{rest}'")
 
-def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) (ranges : HeaderRange) => do
-  let path : System.FilePath := "static" / rest
-  return { path, ranges : RangeFile }
-
 -- ==========================================
 -- Router construction
 -- ==========================================
@@ -241,7 +236,6 @@ def todosRouter : Router := Router.empty
 
 def rootRouter : Router := Router.empty
   |>.addRouter "/api/v1" todosRouter
-  |>.addRoute serveFile
   |>.addRoute anyRoute
 
 -- ==========================================
