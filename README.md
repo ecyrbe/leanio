@@ -141,6 +141,7 @@ at least one binder must be a `Path` extractor.
 - `URI.Path` — request path
 - `URI.Query` — query string
 - `RequestTarget` — full request URI
+- `HeaderRange` — parses the `Range` request header (never errors, returns `none` on missing/parse failure)
 
 ### Custom extractors
 
@@ -290,6 +291,32 @@ instance : IntoResponse Html where
 ```
 
 Then handlers can return `Html` directly.
+
+### File serving with Range support
+
+`RangeFile` streams a file from disk with `Content-Length` framing
+and supports the `Range` header for efficient seeking (video, audio, large files).
+Use the `HeaderRange` extractor to parse the request's `Range` header:
+
+```lean
+def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) (ranges : HeaderRange) => do
+  return { path := "static" / rest, ranges : RangeFile }
+```
+
+Supported range formats:
+* `bytes=0-499`  — closed range
+* `bytes=500-`   — open-ended (to end of file)
+* `bytes=-500`   — suffix range (last N bytes)
+
+MIME types are detected from the file extension (`.mp4`, `.html`, `.png`, ...).
+The `IntoResponse` instance sets `Accept-Ranges: bytes`, returns `206 Partial Content`
+with `Content-Range` for range requests, or `416 Range Not Satisfiable` for
+out-of-bounds ranges.
+
+```lean
+-- curl -H "Range: bytes=0-1023" http://localhost:8080/static/video.mp4
+-- → 206 Partial Content, Content-Range: bytes 0-1023/9876543
+```
 
 ## Middleware
 
