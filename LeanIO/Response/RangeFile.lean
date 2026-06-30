@@ -126,27 +126,30 @@ private def skipBytes (handle : IO.FS.Handle) (n : Nat) : IO Unit := do
 instance : IntoResponse RangeFile where
   into_response f := do
     let file ← f
-    let mdata ← file.path.metadata
-    let fileSize := mdata.byteSize.toNat
-    let handle ← IO.FS.Handle.mk file.path .read
-    match pickRange file.ranges fileSize with
-    | none =>
-      Response.ok
-        |>.header headerContentType (mimeType file.path)
-        |>.header headerAcceptRanges headerBytes
-        |>.stream (sendRangeStream handle fileSize)
-    | some (start, len) =>
-      if start >= fileSize then
-        Response.new.status .rangeNotSatisfiable
-          |>.header! "content-range" s!"bytes */{mdata.byteSize}"
-          |>.empty
-      else
-        skipBytes handle start
-        let endByte := start + len - 1
-        Response.new.status .partialContent
+    if !(←file.path.pathExists) || (←file.path.isDir) then
+      Response.notFound |>.empty
+    else
+      let mdata ← file.path.metadata
+      let fileSize := mdata.byteSize.toNat
+      let handle ← IO.FS.Handle.mk file.path .read
+      match pickRange file.ranges fileSize with
+      | none =>
+        Response.ok
           |>.header headerContentType (mimeType file.path)
           |>.header headerAcceptRanges headerBytes
-          |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
-          |>.stream (sendRangeStream handle len)
+          |>.stream (sendRangeStream handle fileSize)
+      | some (start, len) =>
+        if start >= fileSize then
+          Response.new.status .rangeNotSatisfiable
+            |>.header! "content-range" s!"bytes */{mdata.byteSize}"
+            |>.empty
+        else
+          skipBytes handle start
+          let endByte := start + len - 1
+          Response.new.status .partialContent
+            |>.header headerContentType (mimeType file.path)
+            |>.header headerAcceptRanges headerBytes
+            |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
+            |>.stream (sendRangeStream handle len)
 
 end LeanIO
