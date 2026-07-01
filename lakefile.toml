@@ -16,6 +16,11 @@ name = "leanplay"
 root = "Main"
 srcDir = "Examples/LeanPlay"
 
+[[lean_exe]]
+name = "upload"
+root = "Upload"
+srcDir = "Examples"
+
 [[lean_lib]]
 name = "Tests"
 globs = ["Tests.+"]

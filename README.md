@@ -18,7 +18,7 @@ middleware chaining, and sub-router mounting under path prefixes.
 
 - 🧭 **Routing DSL** — term macros `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, etc.
 - 🔗 **Path extractors** — `Path Nat`, `Path (Nat × String)`, catch-all `Path String`
-- 📦 **Body extractors** — `Json T` auto-deserializes with `FromJson`, `PlainText` for raw strings
+- 📦 **Body extractors** — `Json T` auto-deserializes with `FromJson`, `PlainText` for raw strings, `Form` for URL-encoded data, `MultiPartForm` for streaming file uploads
 - 📤 **Response dispatch** — `IntoResponse` maps return types to HTTP responses (String, JSON, status codes)
 - 🌿 **Catch-all routes** — `{*rest}` captures the remainder of the path
 - 🧩 **Sub-router mounting** — merge sub-routers under a prefix via `addRouter`
@@ -124,6 +124,8 @@ at least one binder must be a `Path` extractor.
 |---|---|---|
 | `Json T` | Request body | `Content-Type: application/json` + `FromJson T` |
 | `PlainText` | Request body | `Content-Type: text/plain` |
+| `Form α` | Request body | `Content-Type: application/x-www-form-urlencoded` + `FromForm α` |
+| `MultiPartForm` | Request body | `Content-Type: multipart/form-data` |
 
 ### Query extractors
 
@@ -131,7 +133,7 @@ at least one binder must be a `Path` extractor.
 |---|---|---|
 | `Query T` | Request URI query string | Deserializes query params into `T` via `FromQuery T` |
 
-### Built-in extractors
+### Other extractors
 
 `FromRequestParts` instances for raw request metadata:
 
@@ -165,7 +167,78 @@ Use in handler: `(⟨key⟩ : ApiKey)`.
 ```lean
 class FromRequestBody (α : Type) where
   from_request_body : Request Body.Stream → ContextAsync (Except String α)
+```
 
+| Extractor | Content-Type | Description |
+|---|---|---|
+| `Json T` | `application/json` | Auto-deserializes via `FromJson T` |
+| `PlainText` | `text/plain` | Raw string body |
+| `Form α` | `application/x-www-form-urlencoded` | Deserialized via `FromForm α` |
+| `MultiPartForm` | `multipart/form-data` | Streaming fields + file uploads |
+
+##### Form (URL-encoded)
+
+`Form α` parses `application/x-www-form-urlencoded` bodies into a typed struct via `FromForm α`.
+Use `deriving FromForm` on a structure to generate the instance automatically.
+
+```lean
+structure LoginForm where
+  username : String
+  password : String
+deriving FromForm
+
+def login := POST "/login" (⟨form⟩ : Form LoginForm) => do
+  return s!"logged in as {form.username}"
+```
+
+For raw access without a struct, use `HashMap String String`:
+
+```lean
+def rawForm := POST "/form" (⟨form⟩ : Form (HashMap String String)) => do
+  let user := form.get? "username" |>.getD ""
+  return s!"user = {user}"
+```
+
+##### MultiPartForm (file uploads)
+
+Streaming multipart parser — consumes the body lazily, never buffers file contents.
+Files are read directly from the `Body.Stream`, chunk by chunk.
+
+```lean
+def handleUpload := POST "/upload" (mp : MultiPartForm) => do
+  while let some entry := ← mp.nextEntry do
+    match entry with
+    | .field name value =>
+      IO.println s!"field {name} = {value}"
+    | .file file =>
+      -- save to disk (streams chunks directly, memory-safe)
+      file.save s!"uploads/{file.filename}"
+      -- or read all into memory (for small files)
+      let data := ← file.bytes
+      -- or stream via callback (e.g. upload to S3)
+      file.stream fun chunk => do
+        handle.write chunk
+      -- or skip
+      file.discard
+  return Status.ok
+```
+
+`FormFile` API:
+
+| Method | Returns | Description |
+|---|---|---|
+| `.save path` | `ContextAsync Unit` | Streams chunks to disk, then flushes |
+| `.bytes` | `ContextAsync ByteArray` | Reads all chunks into memory |
+| `.stream cb` | `ContextAsync Unit` | Calls `cb` for each chunk (no accumulation) |
+| `.discard` | `ContextAsync Unit` | Reads and discards all chunks |
+
+Under the hood, `MultiPartForm` uses [Knuth-Morris-Pratt](https://en.wikipedia.org/wiki/Knuth%E2%80%93Morris%E2%80%93Pratt_algorithm) for boundary detection,
+zero-alloc `ByteArray.Iterator` for prefix checks, and reads directly from `Body.Stream`
+without buffering the entire body. Peaks at ~1MB memory regardless of upload size.
+
+##### Custom FromRequestBody
+
+```lean
 structure Xml (α : Type) where
   body : α
 
@@ -227,6 +300,22 @@ def listTodos := GET "/todos" (⟨page⟩ : Query Pagination) => do
 -- `/todos` → offset=0, limit=10 (defaults)
 -- `/todos?limit=5` → offset=0, limit=5
 -- `/todos?offset=10&limit=20` → offset=10, limit=20
+
+#### Deserializing form params into a struct (`FromForm`)
+
+Use `deriving FromForm` on a structure to parse URL-encoded form fields by field name.
+Fields with default values (`:=`) use that default when the key is missing.
+`Option T` fields default to `none`. Other fields produce an error if missing:
+
+```lean
+structure LoginForm where
+  username : String
+  password : String
+deriving FromForm
+
+def login := POST "/login" (⟨form⟩ : Form LoginForm) => do
+    return s!"logged in as {form.username}"
+```
 
 ### Valid parameter names
 
