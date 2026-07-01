@@ -60,34 +60,43 @@ end LeanIO.Utils
 
 namespace LeanIO
 
-private def buildLPS (needle : ByteArray) : Array Nat := Id.run do
-  let mut lps := Array.ofFn (fun (_ : Fin needle.size) => 0)
+structure ByteSearch where
+  private mk ::
+  needle: ByteArray
+  LPS : Array Nat
+
+namespace ByteSearch
+
+def new (needle: ByteArray) : ByteSearch := Id.run do
+  let mut LPS := Array.replicate needle.size 0
   let mut len := 0
   let mut i := 1
-  while i < needle.size do
-    if needle.get! i = needle.get! len then
+  while h: i < needle.size do
+    if needle.get i = needle.get! len then
       len := len + 1
-      lps := lps.set! i len
+      LPS := LPS.set! i len
       i := i + 1
     else if len = 0 then
       i := i + 1
     else
-      len := lps[len - 1]!
-      pure ()
-  return lps
+      len := LPS[len - 1]!
+  return {needle, LPS}
 
-partial def indexOfSubarrayKMP (haystack : ByteArray) (needle : ByteArray) (start : Nat := 0) : Option Nat :=
-  if needle.size = 0 then some start
-  else if start + needle.size > haystack.size then none
+partial def search (self: ByteSearch) (haystack: ByteArray) (start: Nat := 0): Option Nat := do
+  if self.needle.size = 0 then
+    return start
+  else if start + self.needle.size > haystack.size then
+    none
   else
-    let lps := buildLPS needle
     let rec go (i j : Nat) : Option Nat :=
       if i ≥ haystack.size then none
-      else if haystack.get! i = needle.get! j then
-        if j + 1 = needle.size then some (i - j)
+      else if haystack.get! i = self.needle.get! j then
+        if j + 1 = self.needle.size then some (i - j)
         else go (i + 1) (j + 1)
       else if j = 0 then go (i + 1) 0
-      else go i (lps[j - 1]!)
+      else go i (self.LPS[j - 1]!)
     go start 0
+
+end ByteSearch
 
 end LeanIO
