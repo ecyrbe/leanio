@@ -18,7 +18,7 @@ private structure MultipartInner : Type where
   buf        : ByteArray
   pos        : Nat
   boundStart : ByteArray
-  boundSepSearch : ByteSearch
+  boundSepSearch : Search ByteArray
   stream     : Body.Stream
   phase      : Phase
 
@@ -43,12 +43,12 @@ abbrev namePat : ByteArray := "name=\"".toUTF8
 abbrev fileNamePat : ByteArray := "filename=\"".toUTF8
 abbrev contentTypePat : ByteArray := "Content-Type: ".toUTF8
 
-abbrev crlfcrlfSearch: ByteSearch := ByteSearch.new crlfcrlf
-abbrev quoteSearch: ByteSearch := ByteSearch.new quote
-abbrev crlfSearch: ByteSearch := ByteSearch.new crlf
-abbrev nameSearch: ByteSearch := ByteSearch.new namePat
-abbrev fileNameSearch: ByteSearch := ByteSearch.new fileNamePat
-abbrev contentTypeSearch: ByteSearch := ByteSearch.new contentTypePat
+abbrev crlfcrlfSearch := Search.new crlfcrlf
+abbrev quoteSearch := Search.new quote
+abbrev crlfSearch := Search.new crlf
+abbrev nameSearch := Search.new namePat
+abbrev fileNameSearch := Search.new fileNamePat
+abbrev contentTypeSearch := Search.new contentTypePat
 
 
 private def startsWith (haystack : ByteArray) (needle : ByteArray) (pos : Nat := 0) : Bool :=
@@ -65,13 +65,13 @@ private def startsWith (haystack : ByteArray) (needle : ByteArray) (pos : Nat :=
 private def joinChunks (chunks : List ByteArray) : ByteArray :=
   chunks.reverse.foldl (fun acc b => acc ++ b) ByteArray.empty
 
-private def scanDelim (data : ByteArray) (delimSearch: ByteSearch) : Option (ByteArray × ByteArray) :=
+private def scanDelim (data : ByteArray) (delimSearch: Search ByteArray) : Option (ByteArray × ByteArray) :=
   match delimSearch.search data 0 with
   | some dpos => some (data.extract 0 dpos, data.extract (dpos + delimSearch.needle.size) data.size)
   | none => none
 
-private def splitOverlap (data : ByteArray) (delimSearch: ByteSearch) : Option (ByteArray × ByteArray) :=
-  let overlap := min data.size (max 0 (delimSearch.needle.size - 1))
+private def splitOverlap (data : ByteArray) (delimSearch: Search ByteArray) : Option (ByteArray × ByteArray) :=
+  let overlap := min data.size (delimSearch.needle.size - 1)
   if data.size > overlap then
     some (data.extract 0 (data.size - overlap), data.extract (data.size - overlap) data.size)
   else none
@@ -88,7 +88,7 @@ private def readMore (inner : IO.Ref MultipartInner) : ContextAsync Bool := do
     inner.modify fun s => { s with buf := s.buf ++ chunk.data }
     return true
 
-private partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : ByteSearch) (chunks : List ByteArray) : ContextAsync (List ByteArray) := do
+private partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : Search ByteArray) (chunks : List ByteArray) : ContextAsync (List ByteArray) := do
   let st ← inner.get
   let view := st.buf.extract st.pos st.buf.size
   match scanDelim view delimSearch with
@@ -113,7 +113,7 @@ private partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : B
           inner.modify fun s => { s with pos := s.buf.size }
           return st'.buf.extract st'.pos st'.buf.size :: chunks
 
-private def readUntil (inner : IO.Ref MultipartInner) (delimSearch : ByteSearch) : ContextAsync ByteArray := do
+private def readUntil (inner : IO.Ref MultipartInner) (delimSearch : Search ByteArray) : ContextAsync ByteArray := do
   let cs ← readUntilGo inner delimSearch []
   return joinChunks cs
 
@@ -125,7 +125,7 @@ private partial def skip (inner : IO.Ref MultipartInner) (pref : ByteArray) : Co
     let ok ← readMore inner
     if ok then skip inner pref
 
-private def extractQuotedValue (ba : ByteArray) (keyPrefixSearch : ByteSearch) : Option ByteArray :=
+private def extractQuotedValue (ba : ByteArray) (keyPrefixSearch : Search ByteArray) : Option ByteArray :=
   match keyPrefixSearch.search ba with
   | none => none
   | some pos =>
@@ -134,7 +134,7 @@ private def extractQuotedValue (ba : ByteArray) (keyPrefixSearch : ByteSearch) :
     | none => none
     | some endPos => some (afterKey.extract 0 endPos)
 
-private def extractHeaderValue (ba : ByteArray) (nameSearch : ByteSearch) : Option ByteArray :=
+private def extractHeaderValue (ba : ByteArray) (nameSearch : Search ByteArray) : Option ByteArray :=
   match nameSearch.search ba with
   | none => none
   | some pos =>
@@ -274,7 +274,7 @@ instance : FromRequestBody MultiPartForm where
     let innerVal : MultipartInner :=
       { buf := ByteArray.empty, pos := 0
         boundStart := boundSep.extract 2 boundSep.size
-        boundSepSearch := ByteSearch.new boundSep
+        boundSepSearch := Search.new boundSep
         stream := req.body, phase := .ready }
     let ref ← IO.mkRef innerVal
     return .ok { inner := ref }

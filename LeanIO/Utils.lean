@@ -60,19 +60,26 @@ end LeanIO.Utils
 
 namespace LeanIO
 
-structure ByteSearch where
+structure Search (α: Type) where
   private mk ::
-  needle: ByteArray
+  needle: α
   LPS : Array Nat
 
-namespace ByteSearch
+namespace Search
 
-def new (needle: ByteArray) : ByteSearch := Id.run do
-  let mut LPS := Array.replicate needle.size 0
+class Sized (α: Type) where
+  size : α → Nat
+
+instance : Sized ByteArray where
+ size:= ByteArray.size
+
+
+def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (needle: α) : Search α:= Id.run do
+  let mut LPS := Array.replicate (Sized.size needle) 0
   let mut len := 0
   let mut i := 1
-  while h: i < needle.size do
-    if needle.get i = needle.get! len then
+  while i < (Sized.size needle) do
+    if needle[i]! = needle[len]! then
       len := len + 1
       LPS := LPS.set! i len
       i := i + 1
@@ -82,21 +89,21 @@ def new (needle: ByteArray) : ByteSearch := Id.run do
       len := LPS[len - 1]!
   return {needle, LPS}
 
-partial def search (self: ByteSearch) (haystack: ByteArray) (start: Nat := 0): Option Nat := do
-  if self.needle.size = 0 then
+partial def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
+  if Sized.size self.needle = 0 then
     return start
-  else if start + self.needle.size > haystack.size then
+  else if start + Sized.size self.needle > (Sized.size haystack) then
     none
   else
     let rec go (i j : Nat) : Option Nat :=
-      if i ≥ haystack.size then none
-      else if haystack.get! i = self.needle.get! j then
-        if j + 1 = self.needle.size then some (i - j)
+      if i ≥ (Sized.size haystack) then none
+      else if haystack[i]! = self.needle[j]! then
+        if j + 1 = (Sized.size self.needle) then some (i - j)
         else go (i + 1) (j + 1)
       else if j = 0 then go (i + 1) 0
       else go i (self.LPS[j - 1]!)
     go start 0
 
-end ByteSearch
+end Search
 
 end LeanIO
