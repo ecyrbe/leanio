@@ -73,7 +73,7 @@ class Sized (α: Type) where
 instance : Sized ByteArray where
  size:= ByteArray.size
 
-
+@[specialize]
 def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (needle: α) : Search α:= Id.run do
   let mut LPS := Array.replicate (Sized.size needle) 0
   let mut len := 0
@@ -89,20 +89,38 @@ def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhab
       len := LPS[len - 1]!
   return {needle, LPS}
 
-partial def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
-  if Sized.size self.needle = 0 then
-    return start
-  else if start + Sized.size self.needle > (Sized.size haystack) then
-    none
-  else
-    let rec go (i j : Nat) : Option Nat :=
-      if i ≥ (Sized.size haystack) then none
-      else if haystack[i]! = self.needle[j]! then
-        if j + 1 = (Sized.size self.needle) then some (i - j)
-        else go (i + 1) (j + 1)
-      else if j = 0 then go (i + 1) 0
-      else go i (self.LPS[j - 1]!)
-    go start 0
+  @[specialize]
+  partial def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
+    if Sized.size self.needle = 0 then
+      return start
+    else if start + Sized.size self.needle > (Sized.size haystack) then
+      none
+    else
+      let rec go (i j : Nat) : Option Nat :=
+        if i ≥ (Sized.size haystack) then none
+        else if haystack[i]! = self.needle[j]! then
+          if j + 1 = (Sized.size self.needle) then some (i - j)
+          else go (i + 1) (j + 1)
+        else if j = 0 then go (i + 1) 0
+        else go i (self.LPS[j - 1]!)
+      go start 0
+
+  /-- Compute the longest prefix-suffix overlap between the end of `haystack` and `needle`.
+      Returns the number of trailing bytes that form a prefix of `needle`.
+      Runs KMP on only the last `needle.size - 1` bytes. -/
+  partial def terminalOverlap {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat) : Nat :=
+    let n := Sized.size self.needle
+    if n = 0 then 0
+    else
+      let available := Sized.size haystack - start
+      let scanStart := if available ≥ n then available - n + 1 else 0
+      let rec go (i j : Nat) (endPoint : Nat) : Nat :=
+        if i ≥ endPoint then j
+        else if haystack[i]! = self.needle[j]! then
+          go (i + 1) (j + 1) endPoint
+        else if j = 0 then go (i + 1) 0 endPoint
+        else go i (self.LPS[j - 1]!) endPoint
+      go (start + scanStart) 0 (Sized.size haystack)
 
 end Search
 

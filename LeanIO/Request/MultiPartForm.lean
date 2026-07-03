@@ -1,10 +1,13 @@
 import Lean
 import Std.Async.ContextAsync
+import Std.Data.ByteSlice
 import LeanIO.Request.FromRequestBody
 import LeanIO.Utils
+import LeanIO.Data.ChunkBuffer
+
+open Std.Http Std.Async Std.Slice
 
 namespace LeanIO
-open Std.Http Std.Async
 
 private inductive Phase : Type where
   | ready
@@ -15,12 +18,12 @@ private instance : Inhabited Phase where
   default := .ready
 
 private structure MultipartInner : Type where
-  buf        : ByteArray
-  pos        : Nat
-  boundStart : ByteArray
-  boundSepSearch : Search ByteArray
-  stream     : Body.Stream
-  phase      : Phase
+  cb             : ChunkBuffer
+  pos            : Nat
+  boundStart     : ByteArray
+  boundSepSearch : Search ChunkBuffer
+  stream         : Body.Stream
+  phase          : Phase
 
 structure FormFile where
   name        : String
@@ -38,138 +41,109 @@ structure MultiPartForm where
 abbrev crlf : ByteArray := "\r\n".toUTF8
 abbrev crlfcrlf : ByteArray := "\r\n\r\n".toUTF8
 abbrev endMarker : ByteArray := "--\r\n".toUTF8
-abbrev quote: ByteArray := "\"".toUTF8
-abbrev namePat : ByteArray := "name=\"".toUTF8
-abbrev fileNamePat : ByteArray := "filename=\"".toUTF8
-abbrev contentTypePat : ByteArray := "Content-Type: ".toUTF8
+abbrev namePat  : ByteArray := "name=\"".toUTF8
+abbrev fnamePat : ByteArray := "filename=\"".toUTF8
+abbrev ctPat    : ByteArray := "Content-Type: ".toUTF8
+abbrev quotePat : ByteArray := "\"".toUTF8
 
-abbrev crlfcrlfSearch := Search.new crlfcrlf
-abbrev quoteSearch := Search.new quote
-abbrev crlfSearch := Search.new crlf
-abbrev nameSearch := Search.new namePat
-abbrev fileNameSearch := Search.new fileNamePat
-abbrev contentTypeSearch := Search.new contentTypePat
+abbrev endMarkerCB := ChunkBuffer.ofByteArray endMarker
 
+abbrev crlfcrlfSearch := Search.new <| ChunkBuffer.ofByteArray crlfcrlf
+abbrev crlfSearch     := Search.new <| ChunkBuffer.ofByteArray crlf
+abbrev nameSearch     := Search.new <| ChunkBuffer.ofByteArray namePat
+abbrev fnameSearch    := Search.new <| ChunkBuffer.ofByteArray fnamePat
+abbrev ctSearch       := Search.new <| ChunkBuffer.ofByteArray ctPat
+abbrev quoteSearch    := Search.new <| ChunkBuffer.ofByteArray quotePat
 
-private def startsWith (haystack : ByteArray) (needle : ByteArray) (pos : Nat := 0) : Bool :=
-  if pos + needle.size > haystack.size then false
-  else Id.run do
-    let mut hi := haystack.iter.forward pos
-    let mut ni := needle.iter
-    while !ni.atEnd do
-      if hi.curr ≠ ni.curr then return false
-      hi := hi.next
-      ni := ni.next
-    return true
-
-private def joinChunks (chunks : List ByteArray) : ByteArray :=
-  chunks.reverse.foldl (fun acc b => acc ++ b) ByteArray.empty
-
-private def scanDelim (data : ByteArray) (delimSearch: Search ByteArray) : Option (ByteArray × ByteArray) :=
-  match delimSearch.search data 0 with
-  | some dpos => some (data.extract 0 dpos, data.extract (dpos + delimSearch.needle.size) data.size)
-  | none => none
-
-private def splitOverlap (data : ByteArray) (delimSearch: Search ByteArray) : Option (ByteArray × ByteArray) :=
-  let overlap := min data.size (delimSearch.needle.size - 1)
-  if data.size > overlap then
-    some (data.extract 0 (data.size - overlap), data.extract (data.size - overlap) data.size)
-  else none
+/-- Emit each slice of `body` to `cb`, converting via `toByteArrayFast`. -/
+@[inline]
+private def emitChunks (body : ChunkBuffer) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
+    for chunk in body.chunks do
+      cb chunk.toByteArrayFast
 
 private def readMore (inner : IO.Ref MultipartInner) : ContextAsync Bool := do
   let st ← inner.get
   if st.pos ≥ 65536 then
-    inner.modify fun s => { s with buf := s.buf.extract s.pos s.buf.size, pos := 0 }
+    inner.modify fun s => { s with cb := st.cb.extract st.pos st.cb.size, pos := 0 }
   let st ← inner.get
-  let chunkOpt ← st.stream.recv
-  match chunkOpt with
+  match ← st.stream.recv with
   | none => return false
   | some chunk =>
-    inner.modify fun s => { s with buf := s.buf ++ chunk.data }
+    inner.modify fun s => { s with cb := s.cb.add chunk.data }
     return true
 
-private partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : Search ByteArray) (chunks : List ByteArray) : ContextAsync (List ByteArray) := do
+private partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : Search ChunkBuffer) (startPos : Nat) : ContextAsync (ChunkBuffer × Nat) := do
   let st ← inner.get
-  let view := st.buf.extract st.pos st.buf.size
-  match scanDelim view delimSearch with
-  | some (body, _) =>
-    inner.modify fun s => { s with pos := st.pos + body.size + delimSearch.needle.size }
-    return body :: chunks
-  | none =>
-    if view.size = 0 then
-      let ok ← readMore inner
-      if ok then readUntilGo inner delimSearch chunks
-      else return chunks
+  match st.cb.searchSafe delimSearch st.pos with
+  | .found dpos =>
+    let body := st.cb.extract st.pos dpos
+    let newPos := dpos + delimSearch.needle.size
+    inner.modify fun s => { s with pos := newPos }
+    return (body, newPos)
+  | .notFound safe =>
+    inner.modify fun s => { s with pos := st.pos + safe }
+    readUntilGo inner delimSearch startPos
+  | .needMore =>
+    if ← readMore inner then
+      readUntilGo inner delimSearch startPos
     else
-      match splitOverlap view delimSearch with
-      | some (chunk, _) =>
-        inner.modify fun s => { s with pos := st.pos + chunk.size }
-        readUntilGo inner delimSearch (chunk :: chunks)
-      | none =>
-        if ← readMore inner then
-          readUntilGo inner delimSearch chunks
-        else
-          let st' ← inner.get
-          inner.modify fun s => { s with pos := s.buf.size }
-          return st'.buf.extract st'.pos st'.buf.size :: chunks
+      let total := st.cb.size
+      let body := st.cb.extract startPos total
+      inner.modify fun s => { s with pos := total }
+      return (body, total)
 
-private def readUntil (inner : IO.Ref MultipartInner) (delimSearch : Search ByteArray) : ContextAsync ByteArray := do
-  let cs ← readUntilGo inner delimSearch []
-  return joinChunks cs
+private def readUntil (inner : IO.Ref MultipartInner) (delimSearch : Search ChunkBuffer) : ContextAsync ByteArray := do
+  let st ← inner.get
+  let (body, _) ← readUntilGo inner delimSearch st.pos
+  return body.toByteArray
 
 private partial def skip (inner : IO.Ref MultipartInner) (pref : ByteArray) : ContextAsync Unit := do
   let st ← inner.get
-  if startsWith st.buf pref st.pos then
+  if st.cb.startsWithAt st.pos pref then
     inner.modify fun s => { s with pos := s.pos + pref.size }
   else
     let ok ← readMore inner
     if ok then skip inner pref
 
-private def extractQuotedValue (ba : ByteArray) (keyPrefixSearch : Search ByteArray) : Option ByteArray :=
-  match keyPrefixSearch.search ba with
-  | none => none
-  | some pos =>
-    let afterKey := ba.extract (pos + keyPrefixSearch.needle.size) ba.size
-    match quoteSearch.search afterKey with
-    | none => none
-    | some endPos => some (afterKey.extract 0 endPos)
+private def extractBetween (ba : ByteArray) (prefSearch : Search ChunkBuffer) (prefLen : Nat) (suffSearch : Search ChunkBuffer) : Option ByteArray :=
+  let cb := ChunkBuffer.ofByteArray ba
+  (prefSearch.search cb 0).bind fun pos =>
+    let after := pos + prefLen
+    if after ≥ ba.size then none
+    else (suffSearch.search cb after).bind fun endPos =>
+      if endPos > ba.size then none else some (ba.extract after endPos)
 
-private def extractHeaderValue (ba : ByteArray) (nameSearch : Search ByteArray) : Option ByteArray :=
-  match nameSearch.search ba with
-  | none => none
-  | some pos =>
-    let afterName := ba.extract (pos + nameSearch.needle.size) ba.size
-    match crlfSearch.search afterName with
-    | none => some afterName
-    | some endPos => some (afterName.extract 0 endPos)
+private def extractAfter (ba : ByteArray) (prefSearch : Search ChunkBuffer) (prefLen : Nat) : Option ByteArray :=
+  let cb := ChunkBuffer.ofByteArray ba
+  (prefSearch.search cb 0).bind fun pos =>
+    let after := pos + prefLen
+    if after ≥ ba.size then none
+    else
+      match crlfSearch.search cb after with
+      | none => if after ≤ ba.size then some (ba.extract after ba.size) else none
+      | some endPos =>
+        if endPos > ba.size then some (ba.extract after ba.size)
+        else some (ba.extract after endPos)
 
+@[inline]
 private def parseHeaders (hdrBytes : ByteArray) : Option String × Option String × String :=
-  let nameRaw := extractQuotedValue hdrBytes nameSearch
-  let fnameRaw := extractQuotedValue hdrBytes fileNameSearch
-  let ctRaw := extractHeaderValue hdrBytes contentTypeSearch
+  let nameRaw := extractBetween hdrBytes nameSearch namePat.size quoteSearch
+  let fnameRaw := extractBetween hdrBytes fnameSearch fnamePat.size quoteSearch
+  let ctRaw := extractAfter hdrBytes ctSearch ctPat.size
   let name := nameRaw >>= String.fromUTF8?
   let filename := fnameRaw >>= String.fromUTF8?
   let contentType := match ctRaw with
-    | some ba =>
-      let s := (String.fromUTF8? ba).getD ""
-      s.replace "\r" ""
+    | some b => ((String.fromUTF8? b).getD "").replace "\r" ""
     | none => "application/octet-stream"
   (name, filename, contentType)
 
-private def consumeFileBody (inner : IO.Ref MultipartInner) : ContextAsync ByteArray := do
-  let st ← inner.get
-  let body ← readUntil inner st.boundSepSearch
-  inner.modify fun s => { s with phase := .ready }
-  return body
-
 private def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
   let st ← inner.get
-  let first := st.pos = 0 && st.buf.size = 0
-  if first then
+  if st.pos = 0 && st.cb.size = 0 then
     skip inner st.boundStart
   skip inner crlf
   let st ← inner.get
-  if startsWith st.buf endMarker st.pos then
+  if st.cb.startsWithAt st.pos endMarker then
     inner.modify fun s => { s with pos := s.pos + endMarker.size, phase := .done }
     return none
   let headerBytes ← readUntil inner crlfcrlfSearch
@@ -189,46 +163,57 @@ private def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Optio
             name := name, filename := fn, contentType := contentType, inner := inner
           })
 
-private partial def streamFile (inner : IO.Ref MultipartInner) (cb : ByteArray → ContextAsync Unit) (tails : List ByteArray) : ContextAsync Unit := do
+/-- Split `dataCB` at `boundSearch`. If found: emit body slices, store rest. Otherwise:
+    emit safe portion and pass tail/remainder to `k`. -/
+private def emitBoundary (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuffer)
+    (dataCB : ChunkBuffer) (cb : ByteArray → ContextAsync Unit)
+    (k : ChunkBuffer → ContextAsync Unit) : ContextAsync Unit := do
+  let dataLen := dataCB.size
+  match dataCB.searchSafe boundSearch 0 with
+  | .found dpos =>
+    let needleSz := boundSearch.needle.size
+    emitChunks (dataCB.extract 0 dpos) cb
+    inner.modify fun s => { s with cb := dataCB.extract (dpos + needleSz) dataLen, pos := 0, phase := .ready }
+  | .notFound safe =>
+    emitChunks (dataCB.extract 0 safe) cb
+    k (dataCB.extract safe dataLen)
+  | .needMore =>
+    k dataCB
+
+/-- Stream raw chunks from the stream. No buffering in ChunkBuffer. -/
+private partial def streamRaw (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuffer)
+    (cb : ByteArray → ContextAsync Unit) (carry : ChunkBuffer) : ContextAsync Unit := do
   let st ← inner.get
-  let remaining := st.buf.size - st.pos
-  if remaining > 0 then
-    inner.modify fun s => { s with pos := s.buf.size }
-    streamFile inner cb (st.buf.extract st.pos st.buf.size :: tails)
-    return
   let chunkOpt ← st.stream.recv
   match chunkOpt with
   | none =>
-    let pre := joinChunks tails
-    if pre.size > 0 then cb pre
+    if carry.size > 0 then
+      emitBoundary inner boundSearch carry cb fun rest => do
+        emitChunks rest cb
     inner.modify fun s => { s with phase := .ready }
   | some chunk =>
-    let data := joinChunks tails ++ chunk.data
-    match scanDelim data st.boundSepSearch with
-    | some (body, rest) =>
-      inner.modify fun s => { s with buf := rest, pos := 0, phase := .ready }
-      cb body
-    | none =>
-      match splitOverlap data st.boundSepSearch with
-      | some (body, tail) =>
-        cb body
-        streamFile inner cb (tail :: [])
-      | none =>
-        streamFile inner cb (data :: [])
+    let dataLen := carry.size + chunk.data.size
+    emitBoundary inner boundSearch (carry.add chunk.data) cb fun rest => do
+      if rest.size = dataLen then
+        emitChunks rest cb
+        streamRaw inner boundSearch cb ChunkBuffer.empty
+      else
+        streamRaw inner boundSearch cb rest
 
 private def extractBoundary (contentType : String) : Option String :=
-  let parts := contentType.split (fun c => c == ';')
-  let rec find (ps : List String.Slice) : Option String :=
-    match ps with
-    | [] => none
-    | p :: rest =>
-      let s := p.toString.trimAscii
-      if s.startsWith "boundary=" then
-        let val := s.dropPrefix "boundary="
-        let val := val.takeWhile (fun c => c ≠ ';' && c ≠ ' ' && c ≠ '\"') |>.toString
-        some val
-      else find rest
-  find parts.toList
+  (contentType.split (· = ';')).toList.filterMap (fun s =>
+    (s.toString.trimAscii.dropPrefix? "boundary=").map fun val =>
+      val.takeWhile (fun c => c ≠ ';' && c ≠ ' ' && c ≠ '\"') |>.toString)
+  |>.head?
+
+private def startStreamFile (f : FormFile) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
+  let st ← f.inner.get
+  f.inner.set { st with cb := ChunkBuffer.empty, pos := 0 }
+  streamRaw f.inner st.boundSepSearch cb (st.cb.extract st.pos st.cb.size)
+
+/-
+ Public API
+-/
 
 def MultiPartForm.nextEntry (mp : MultiPartForm) : ContextAsync (Option MultipartEntry) := do
   let st ← mp.inner.get
@@ -240,14 +225,15 @@ def MultiPartForm.nextEntry (mp : MultiPartForm) : ContextAsync (Option Multipar
 def FormFile.stream (f : FormFile) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
   let st ← f.inner.get
   match st.phase with
-  | .inFile => streamFile f.inner cb []
+  | .inFile => startStreamFile f cb
   | _ => return
 
 def FormFile.discard (f : FormFile) : ContextAsync Unit := do
   let st ← f.inner.get
   match st.phase with
   | .inFile =>
-    let _ ← consumeFileBody f.inner
+    f.inner.modify fun s => { s with cb := ChunkBuffer.empty, pos := 0 }
+    streamRaw f.inner st.boundSepSearch (fun _ => pure ()) ChunkBuffer.empty
   | _ => return
 
 def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit := do
@@ -255,8 +241,9 @@ def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit :=
   match st.phase with
   | .inFile =>
     let handle ← IO.FS.Handle.mk path .write
-    f.stream fun chunk => do handle.write chunk
-    handle.flush
+    let fStream := IO.FS.Stream.ofHandle handle
+    f.stream fun chunk => do fStream.write chunk
+    fStream.flush
   | _ => return
 
 instance : FromRequestBody MultiPartForm where
@@ -272,9 +259,9 @@ instance : FromRequestBody MultiPartForm where
       | return .error "failed to extract boundary from content-type"
     let boundSep := ("\r\n--" ++ boundary).toUTF8
     let innerVal : MultipartInner :=
-      { buf := ByteArray.empty, pos := 0
+      { cb := ChunkBuffer.empty, pos := 0
         boundStart := boundSep.extract 2 boundSep.size
-        boundSepSearch := Search.new boundSep
+        boundSepSearch := Search.new (ChunkBuffer.ofByteArray boundSep)
         stream := req.body, phase := .ready }
     let ref ← IO.mkRef innerVal
     return .ok { inner := ref }
