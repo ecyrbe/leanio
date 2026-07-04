@@ -1,9 +1,10 @@
 import Lean
 import Std.Async.ContextAsync
 import LeanIO.Request.FromRequestBody
+import LeanIO.Data.MimeType
 
 namespace LeanIO
-open Std.Http Std.Async
+open Std.Http Std.Async MimeType
 
 /-!
 # URL-encoded Form Body Extraction
@@ -43,12 +44,15 @@ private def parseUrlEncoded (body : String) : Std.HashMap String String :=
     | key :: _ => map.insert (pctDecode key) ""
     | _ => map
 
-private def mimeUrlEncoded : Header.Value := Header.Value.mk "application/x-www-form-urlencoded"
+instance : HasMimeTypes (Form α) where
+  mimes? := some [MimeType.formUrlEncoded]
 
 instance [FromForm α] : FromRequestBody (Form α) where
   from_request_body req := do
-    if !req.line.headers.hasEntry .contentType mimeUrlEncoded then
-      return .error s!"application/x-www-form-urlencoded content-type expected, received {req.line.headers.get! .contentType}"
+    match checkMimeTypes (Form α) req.line.headers with
+    | .ok _ => pure ()
+    | .error e => return .error e
+
     let body : String ← req.body.readAll
     let map := parseUrlEncoded body
     match FromForm.fromForm map with

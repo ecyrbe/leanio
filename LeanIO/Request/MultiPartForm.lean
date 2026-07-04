@@ -4,10 +4,11 @@ import Std.Data.ByteSlice
 import LeanIO.Request.FromRequestBody
 import LeanIO.Utils
 import LeanIO.Data.ChunkBuffer
+import LeanIO.Data.MimeType
 
-open Std.Http Std.Async Std.Slice
 
 namespace LeanIO
+open Std.Http Std.Async Std.Slice MimeType
 
 private inductive Phase : Type where
   | ready
@@ -245,6 +246,9 @@ def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit :=
     f.stream fun chunk => do fStream.write chunk
     fStream.flush
   | _ => return
+
+instance : HasMimeTypes (MultiPartForm) where
+  mimes? := some [MimeType.multipartForm]
 
 instance : FromRequestBody MultiPartForm where
   from_request_body req := do

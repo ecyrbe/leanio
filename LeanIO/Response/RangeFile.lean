@@ -1,6 +1,7 @@
 import Std.Async.ContextAsync
 import LeanIO.Response.IntoResponse
 import LeanIO.Request.HeaderRange
+import LeanIO.Data.MimeType
 
 namespace LeanIO
 open Std.Http Std.Async
@@ -9,54 +10,32 @@ private def headerContentType  : Header.Name := Header.Name.mk "content-type"
 private def headerAcceptRanges : Header.Name := Header.Name.mk "accept-ranges"
 private def headerContentRange : Header.Name := Header.Name.mk "content-range"
 
-private def mimeOctetStream    : Header.Value := Header.Value.mk "application/octet-stream"
-private def mimeTextPlain      : Header.Value := Header.Value.mk "text/plain"
-private def mimeTextHtml       : Header.Value := Header.Value.mk "text/html"
-private def mimeTextCss        : Header.Value := Header.Value.mk "text/css"
-private def mimeAppJavascript  : Header.Value := Header.Value.mk "application/javascript"
-private def mimeAppJson        : Header.Value := Header.Value.mk "application/json"
-private def mimeAppPdf         : Header.Value := Header.Value.mk "application/pdf"
-private def mimeImagePng       : Header.Value := Header.Value.mk "image/png"
-private def mimeImageJpeg      : Header.Value := Header.Value.mk "image/jpeg"
-private def mimeImageGif       : Header.Value := Header.Value.mk "image/gif"
-private def mimeImageSvg       : Header.Value := Header.Value.mk "image/svg+xml"
-private def mimeImageWebp      : Header.Value := Header.Value.mk "image/webp"
-private def mimeImageIcon      : Header.Value := Header.Value.mk "image/x-icon"
-private def mimeVideoMp4       : Header.Value := Header.Value.mk "video/mp4"
-private def mimeVideoWebm      : Header.Value := Header.Value.mk "video/webm"
-private def mimeVideoOgg       : Header.Value := Header.Value.mk "video/ogg"
-private def mimeVideoQuicktime : Header.Value := Header.Value.mk "video/quicktime"
-private def mimeVideoAvi       : Header.Value := Header.Value.mk "video/x-msvideo"
-private def mimeVideoMkv       : Header.Value := Header.Value.mk "video/x-matroska"
-private def mimeAudioMpeg      : Header.Value := Header.Value.mk "audio/mpeg"
-private def mimeAudioWav       : Header.Value := Header.Value.mk "audio/wav"
-private def mimeAudioFlac      : Header.Value := Header.Value.mk "audio/flac"
 private def headerBytes        : Header.Value := Header.Value.mk "bytes"
 
 private def mimeType (path : System.FilePath) : Header.Value :=
   match path.extension with
-  | "mp4"  => mimeVideoMp4
-  | "webm" => mimeVideoWebm
-  | "ogg"  => mimeVideoOgg
-  | "mov"  => mimeVideoQuicktime
-  | "avi"  => mimeVideoAvi
-  | "mkv"  => mimeVideoMkv
-  | "mp3"  => mimeAudioMpeg
-  | "wav"  => mimeAudioWav
-  | "flac" => mimeAudioFlac
-  | "pdf"  => mimeAppPdf
-  | "html" => mimeTextHtml
-  | "css"  => mimeTextCss
-  | "js"   => mimeAppJavascript
-  | "json" => mimeAppJson
-  | "png"  => mimeImagePng
-  | "jpg"  | "jpeg" => mimeImageJpeg
-  | "gif"  => mimeImageGif
-  | "svg"  => mimeImageSvg
-  | "webp" => mimeImageWebp
-  | "ico"  => mimeImageIcon
-  | "txt"  => mimeTextPlain
-  | _      => mimeOctetStream
+  | "mp4"  => MimeType.videoMp4
+  | "webm" => MimeType.videoWebm
+  | "ogg"  => MimeType.videoOgg
+  | "mov"  => MimeType.videoQuicktime
+  | "avi"  => MimeType.videoAvi
+  | "mkv"  => MimeType.videoMkv
+  | "mp3"  => MimeType.audioMpeg
+  | "wav"  => MimeType.audioWav
+  | "flac" => MimeType.audioFlac
+  | "pdf"  => MimeType.applicationPdf
+  | "html" => MimeType.textHtml
+  | "css"  => MimeType.textCss
+  | "js"   => MimeType.applicationJavascript
+  | "json" => MimeType.applicationJson
+  | "png"  => MimeType.imagePng
+  | "jpg"  | "jpeg" => MimeType.imageJpeg
+  | "gif"  => MimeType.imageGif
+  | "svg"  => MimeType.imageSvg
+  | "webp" => MimeType.imageWebp
+  | "ico"  => MimeType.imageIcon
+  | "txt"  => MimeType.textPlain
+  | _      => MimeType.octetStream
 
 abbrev FileResponse := ContextAsync (Response Body.Any)
 
