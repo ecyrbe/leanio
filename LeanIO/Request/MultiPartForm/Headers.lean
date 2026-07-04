@@ -5,20 +5,8 @@ import LeanIO.Data.String
 
 namespace LeanIO
 open Std.Http Std.Slice
-open Lean Elab Term
 
-abbrev contentDisposition : Header.Name := .ofString! "content-disposition"
-
-elab "kmp! " t:str : term => do
-      let s := t.getString
-      let cb := ChunkBuffer.ofByteArray s.toUTF8
-      let lps := (Search.new cb).LPS
-      let lpsNums : Array (TSyntax `term) := lps.map (λ (n : Nat) => ⟨Syntax.mkNumLit (toString n)⟩)
-      let stx ← `(Search.mk (α := ChunkBuffer) (ChunkBuffer.ofByteArray ($(quote s) : String).toUTF8) #[$[$lpsNums],*])
-      elabTerm stx none
-
-abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
-abbrev crlfSearch     := kmp! "\r\n"
+abbrev contentDisposition := Header.Name.mk "content-disposition"
 
 /-- Parse a header line "Name: value" into a `(Name, Value)` pair. Splits on first colon only. -/
 def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
