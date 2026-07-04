@@ -40,21 +40,26 @@ structure MultiPartForm where
   inner : IO.Ref MultipartInner
 
 abbrev crlf : ByteArray := "\r\n".toUTF8
-abbrev crlfcrlf : ByteArray := "\r\n\r\n".toUTF8
 abbrev endMarker : ByteArray := "--\r\n".toUTF8
-abbrev namePat  : ByteArray := "name=\"".toUTF8
-abbrev fnamePat : ByteArray := "filename=\"".toUTF8
-abbrev ctPat    : ByteArray := "Content-Type: ".toUTF8
-abbrev quotePat : ByteArray := "\"".toUTF8
 
 abbrev endMarkerCB := ChunkBuffer.ofByteArray endMarker
 
-abbrev crlfcrlfSearch := Search.new <| ChunkBuffer.ofByteArray crlfcrlf
-abbrev crlfSearch     := Search.new <| ChunkBuffer.ofByteArray crlf
-abbrev nameSearch     := Search.new <| ChunkBuffer.ofByteArray namePat
-abbrev fnameSearch    := Search.new <| ChunkBuffer.ofByteArray fnamePat
-abbrev ctSearch       := Search.new <| ChunkBuffer.ofByteArray ctPat
-abbrev quoteSearch    := Search.new <| ChunkBuffer.ofByteArray quotePat
+
+open Lean Elab Term in
+elab "kmp! " t:str : term => do
+      let s := t.getString
+      let cb := ChunkBuffer.ofByteArray s.toUTF8
+      let lps := (Search.new cb).LPS
+      let lpsNums : Array (TSyntax `term) := lps.map (λ (n : Nat) => ⟨Syntax.mkNumLit (toString n)⟩)
+      let stx ← `(Search.mk (α := ChunkBuffer) (ChunkBuffer.ofByteArray ($(quote s) : String).toUTF8) #[$[$lpsNums],*])
+      elabTerm stx none
+
+abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
+abbrev crlfSearch     := kmp! "\r\n"
+abbrev nameSearch     := kmp! "name=\""
+abbrev fnameSearch    := kmp! "filename=\""
+abbrev ctSearch       := kmp! "Content-Type: "
+abbrev quoteSearch    := kmp! "\""
 
 /-- Emit each slice of `body` to `cb`, converting via `toByteArrayFast`. -/
 @[inline]
@@ -128,9 +133,9 @@ private def extractAfter (ba : ByteArray) (prefSearch : Search ChunkBuffer) (pre
 
 @[inline]
 private def parseHeaders (hdrBytes : ByteArray) : Option String × Option String × String :=
-  let nameRaw := extractBetween hdrBytes nameSearch namePat.size quoteSearch
-  let fnameRaw := extractBetween hdrBytes fnameSearch fnamePat.size quoteSearch
-  let ctRaw := extractAfter hdrBytes ctSearch ctPat.size
+  let nameRaw := extractBetween hdrBytes nameSearch nameSearch.needle.size quoteSearch
+  let fnameRaw := extractBetween hdrBytes fnameSearch fnameSearch.needle.size quoteSearch
+  let ctRaw := extractAfter hdrBytes ctSearch ctSearch.needle.size
   let name := nameRaw >>= String.fromUTF8?
   let filename := fnameRaw >>= String.fromUTF8?
   let contentType := match ctRaw with

@@ -61,19 +61,18 @@ end LeanIO.Utils
 namespace LeanIO
 
 structure Search (α: Type) where
-  private mk ::
   needle: α
   LPS : Array Nat
 
 namespace Search
 
-class Sized (α: Type) where
-  size : α → Nat
+  class Sized (α: Type) where
+    size : α → Nat
 
-instance : Sized ByteArray where
- size:= ByteArray.size
+  instance : Sized ByteArray where
+   size:= ByteArray.size
 
-@[specialize]
+  @[specialize]
 def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (needle: α) : Search α:= Id.run do
   let mut LPS := Array.replicate (Sized.size needle) 0
   let mut len := 0
