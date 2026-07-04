@@ -25,11 +25,13 @@ private structure MultipartInner : Type where
   boundSepSearch : Search ChunkBuffer
   stream         : Body.Stream
   phase          : Phase
+  nameCounter    : Nat
 
 structure FormFile where
   name        : String
   filename    : String
   contentType : String
+  headers     : Headers
   inner       : IO.Ref MultipartInner
 
 inductive MultipartEntry : Type where
@@ -42,9 +44,6 @@ structure MultiPartForm where
 abbrev crlf : ByteArray := "\r\n".toUTF8
 abbrev endMarker : ByteArray := "--\r\n".toUTF8
 
-abbrev endMarkerCB := ChunkBuffer.ofByteArray endMarker
-
-
 open Lean Elab Term in
 elab "kmp! " t:str : term => do
       let s := t.getString
@@ -56,10 +55,8 @@ elab "kmp! " t:str : term => do
 
 abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
 abbrev crlfSearch     := kmp! "\r\n"
-abbrev nameSearch     := kmp! "name=\""
-abbrev fnameSearch    := kmp! "filename=\""
-abbrev ctSearch       := kmp! "Content-Type: "
-abbrev quoteSearch    := kmp! "\""
+
+private abbrev contentDisposition : Header.Name := .ofString! "content-disposition"
 
 /-- Emit each slice of `body` to `cb`, converting via `toByteArrayFast`. -/
 @[inline]
@@ -111,37 +108,59 @@ private partial def skip (inner : IO.Ref MultipartInner) (pref : ByteArray) : Co
     let ok ← readMore inner
     if ok then skip inner pref
 
-private def extractBetween (ba : ByteArray) (prefSearch : Search ChunkBuffer) (prefLen : Nat) (suffSearch : Search ChunkBuffer) : Option ByteArray :=
-  let cb := ChunkBuffer.ofByteArray ba
-  (prefSearch.search cb 0).bind fun pos =>
-    let after := pos + prefLen
-    if after ≥ ba.size then none
-    else (suffSearch.search cb after).bind fun endPos =>
-      if endPos > ba.size then none else some (ba.extract after endPos)
+/-- Parse a header line "Name: value" into a `(Name, Value)` pair. Splits on first colon only. -/
+private def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
+  match String.splitOnce line ':' with
+  | none => none
+  | some (name, val) =>
+    let name := name.trimAscii.toString
+    let val := val.trimAscii.toString
+    (Header.Name.ofString? name).bind fun n =>
+    (Header.Value.ofString? val).map fun v => (n, v)
 
-private def extractAfter (ba : ByteArray) (prefSearch : Search ChunkBuffer) (prefLen : Nat) : Option ByteArray :=
-  let cb := ChunkBuffer.ofByteArray ba
-  (prefSearch.search cb 0).bind fun pos =>
-    let after := pos + prefLen
-    if after ≥ ba.size then none
-    else
-      match crlfSearch.search cb after with
-      | none => if after ≤ ba.size then some (ba.extract after ba.size) else none
-      | some endPos =>
-        if endPos > ba.size then some (ba.extract after ba.size)
-        else some (ba.extract after endPos)
+/-- Parse raw header bytes into `Std.Http.Headers`. Returns `none` on parse failure. -/
+private def parseHeaders (hdrBytes : ByteArray) : Option Headers := do
+  let hdrStr ← String.fromUTF8? hdrBytes
+  (hdrStr.splitOn "\r\n").foldlM (fun (hds : Headers) (line : String) =>
+    let clean := line.trimAscii.toString
+    if clean.isEmpty then some hds else
+      match parseOneHeader clean with
+      | some (n, v) => some (hds.insert n v)
+      | none => none
+    ) (∅ : Headers)
 
-@[inline]
-private def parseHeaders (hdrBytes : ByteArray) : Option String × Option String × String :=
-  let nameRaw := extractBetween hdrBytes nameSearch nameSearch.needle.size quoteSearch
-  let fnameRaw := extractBetween hdrBytes fnameSearch fnameSearch.needle.size quoteSearch
-  let ctRaw := extractAfter hdrBytes ctSearch ctSearch.needle.size
-  let name := nameRaw >>= String.fromUTF8?
-  let filename := fnameRaw >>= String.fromUTF8?
-  let contentType := match ctRaw with
-    | some b => ((String.fromUTF8? b).getD "").replace "\r" ""
-    | none => "application/octet-stream"
-  (name, filename, contentType)
+/-- Extract a quoted parameter value from a Content-Disposition value string. -/
+private def extractParam (params : String) (key : String) : Option String :=
+  let keySuffix := key ++ "=\""
+  (params.split (· == ';')).toList.findSome? fun part =>
+    let trimmed := part.toString.trimAscii.toString
+    if trimmed.startsWith keySuffix then
+      let inner := trimmed.drop keySuffix.length
+      inner.takeWhile (· ≠ '\"') |> toString |> fun s =>
+        if s.isEmpty then none else some s
+    else none
+
+/-- Extract the `name` parameter from Content-Disposition headers. -/
+private def contentDispositionName (hds : Headers) : Option String :=
+  match hds.get? contentDisposition with
+  | none => none
+  | some v => extractParam v.value "name"
+
+/-- Extract the `filename` parameter from Content-Disposition headers. -/
+private def contentDispositionFilename (hds : Headers) : Option String :=
+  match hds.get? contentDisposition with
+  | none => none
+  | some v => extractParam v.value "filename"
+
+/-- Extract the Content-Type from headers, defaulting to `text/plain` per RFC 2046 §5.1. -/
+private def headerContentType (hds : Headers) : String :=
+  match hds.get? .contentType with
+  | some v => v.value
+  | none => "text/plain"
+
+/-- Build a generated filename: `{name}{counter}.{ext}`. -/
+private def generatedFilename (name : String) (counter : Nat) (mime : String) : String :=
+  s!"{name}{counter}.{extForMime mime}"
 
 private def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
   let st ← inner.get
@@ -153,7 +172,12 @@ private def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Optio
     inner.modify fun s => { s with pos := s.pos + endMarker.size, phase := .done }
     return none
   let headerBytes ← readUntil inner crlfcrlfSearch
-  let (name, filename, contentType) := parseHeaders headerBytes
+  let some hds := parseHeaders headerBytes
+    | inner.modify fun s => { s with phase := .done }
+      return none
+  let name := contentDispositionName hds
+  let filename := contentDispositionFilename hds
+  let contentType := headerContentType hds
   match name with
     | none =>
         inner.modify fun s => { s with phase := .done }
@@ -161,12 +185,20 @@ private def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Optio
     | some name =>
         match filename with
         | none =>
-          let bodyBytes ← readUntil inner st.boundSepSearch
-          return some (.field name ((String.fromUTF8? bodyBytes).getD ""))
+          if contentType.startsWith "text/" then
+            let bodyBytes ← readUntil inner st.boundSepSearch
+            return some (.field name ((String.fromUTF8? bodyBytes).getD ""))
+          else
+            let counter := st.nameCounter
+            inner.modify fun s => { s with nameCounter := s.nameCounter + 1, phase := .inFile }
+            let fn := generatedFilename name counter contentType
+            return some (.file {
+              name := name, filename := fn, contentType := contentType, headers := hds, inner := inner
+            })
         | some fn =>
           inner.modify fun s => { s with phase := .inFile }
           return some (.file {
-            name := name, filename := fn, contentType := contentType, inner := inner
+            name := name, filename := fn, contentType := contentType, headers := hds, inner := inner
           })
 
 /-- Split `dataCB` at `boundSearch`. If found: emit body slices, store rest. Otherwise:
@@ -221,6 +253,18 @@ private def startStreamFile (f : FormFile) (cb : ByteArray → ContextAsync Unit
  Public API
 -/
 
+/-!
+Grammar for multipart/<any> content type:
+multipart-body  := preamble 1*encapsulation close-delimiter epilogue
+encapsulation   := delimiter body-part CRLF
+delimiter       := "--" boundary CRLF
+close-delimiter := "--" boundary "--" CRLF
+preamble        := discard-text
+epilogue        := discard-text
+discard-text    := *(*text CRLF)
+body-part       := *(header-field CRLF) CRLF [body-content]
+-/
+
 def MultiPartForm.nextEntry (mp : MultiPartForm) : ContextAsync (Option MultipartEntry) := do
   let st ← mp.inner.get
   match st.phase with
@@ -271,7 +315,7 @@ instance : FromRequestBody MultiPartForm where
       { cb := ChunkBuffer.empty, pos := 0
         boundStart := boundSep.extract 2 boundSep.size
         boundSepSearch := Search.new (ChunkBuffer.ofByteArray boundSep)
-        stream := req.body, phase := .ready }
+        stream := req.body, phase := .ready, nameCounter := 0 }
     let ref ← IO.mkRef innerVal
     return .ok { inner := ref }
 

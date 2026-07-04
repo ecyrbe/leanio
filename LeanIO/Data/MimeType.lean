@@ -1,4 +1,5 @@
 import Std.Http
+import LeanIO.Data.String
 
 namespace LeanIO.MimeType
 open Std.Http
@@ -56,6 +57,41 @@ def applicationJs  := Header.Value.mk "application/javascript"
 def applicationJson:= Header.Value.mk "application/json"
 def applicationPdf := Header.Value.mk "application/pdf"
 def applicationZip := Header.Value.mk "application/zip"
+
+/-- Map a MIME type string to a file extension. Returns `bin` if unknown.
+    Strips parameters (everything after `;`) before matching. -/
+def extForMime (mime : String) : String :=
+  let mime := match mime.splitOnce ';' with
+    | some (base, _) => base.trimAscii
+    | none => mime.trimAscii
+  match mime with
+  | "text/plain"                  => "txt"
+  | "text/html"                   => "html"
+  | "text/css"                    => "css"
+  | "text/markdown"               => "md"
+  | "text/javascript"             => "js"
+  | "image/png"                   => "png"
+  | "image/jpeg"                  => "jpg"
+  | "image/gif"                   => "gif"
+  | "image/svg+xml"               => "svg"
+  | "image/webp"                  => "webp"
+  | "image/x-icon"                => "ico"
+  | "video/mp4"                   => "mp4"
+  | "video/webm"                  => "webm"
+  | "video/ogg"                   => "ogv"
+  | "video/quicktime"             => "mov"
+  | "video/x-msvideo"             => "avi"
+  | "video/x-matroska"            => "mkv"
+  | "audio/mpeg"                  => "mp3"
+  | "audio/wav"                   => "wav"
+  | "audio/flac"                  => "flac"
+  | "application/javascript"      => "js"
+  | "application/json"            => "json"
+  | "application/pdf"             => "pdf"
+  | "application/zip"             => "zip"
+  | "application/octet-stream"    => "bin"
+  | "application/x-www-form-urlencoded" => "txt"
+  | _ => "bin"
 
 end LeanIO.MimeType
 
