@@ -24,11 +24,12 @@ abbrev crlfSearch     := kmp! "\r\n"
 def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
   match String.splitOnce line ':' with
   | none => none
-  | some (name, val) =>
+  | some (name, value) =>
     let name := name.trimAscii.toString
-    let val := val.trimAscii.toString
-    (Header.Name.ofString? name).bind fun n =>
-    (Header.Value.ofString? val).map fun v => (n, v)
+    let val := value.trimAscii.toString
+    match Header.Name.ofString? name, Header.Value.ofString? val with
+    | some name, some value => some (name, value)
+    | _,_ => none
 
 /-- Parse raw header bytes into `Std.Http.Headers`. Returns `none` on parse failure. -/
 def parseHeaders (hdrBytes : ByteArray) : Option Headers := do
@@ -44,13 +45,15 @@ def parseHeaders (hdrBytes : ByteArray) : Option Headers := do
 /-- Extract a quoted parameter value from a Content-Disposition value string. -/
 def extractParam (params : String) (key : String) : Option String :=
   let keySuffix := key ++ "=\""
-  (params.split (· == ';')).toList.findSome? fun part =>
-    let trimmed := part.toString.trimAscii.toString
-    if trimmed.startsWith keySuffix then
-      let inner := trimmed.drop keySuffix.length
-      inner.takeWhile (· ≠ '\"') |> toString |> fun s =>
-        if s.isEmpty then none else some s
-    else none
+  (params.split (· == ';')).findSome? fun part =>
+    let trimmed := part.trimAscii
+    trimmed.dropPrefix? keySuffix
+    |>.map (·.takeWhile (· ≠ '\"'))
+    |>.bind fun s =>
+        if s.isEmpty then
+          none
+        else
+          some s.toString
 
 /-- Extract the `name` parameter from Content-Disposition headers. -/
 def contentDispositionName (hds : Headers) : Option String :=
