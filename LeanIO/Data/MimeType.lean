@@ -85,7 +85,7 @@ def checkMimeTypes (t: Type) [HasMimeTypes t] (headers: Headers): Except String 
     if mimes.any fun mime => headers.hasMimeType mime then
       return ()
     else
-      throw s!"expected {(mimes.map (·.value)).intersperse " or "}"
+      throw s!"expected {" or ".intercalate <| mimes.map (·.value)}"
   | none => return ()
 
 end LeanIO.MimeType
