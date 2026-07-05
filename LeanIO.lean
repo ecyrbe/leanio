@@ -2,7 +2,8 @@ import LeanIO.Router
 import LeanIO.Middlewares
 import LeanIO.Utils
 import LeanIO.Response.IntoResponse
-import LeanIO.Response.RangeFile
+import LeanIO.Response.File.File
+import LeanIO.Response.File.RangeFile
 import LeanIO.Request.FromRequestBody
 import LeanIO.Request.FromRequestParts
 import LeanIO.Request.HeaderRange

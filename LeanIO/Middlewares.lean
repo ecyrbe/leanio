@@ -1,14 +1,7 @@
 import LeanIO.Router
 import LeanIO.Utils
 import LeanIO.Data.Redacted
-
-namespace Std.Http.Header.Name
-
--- Response Headers
-def wwwAuthenticate: Header.Name := mk "www-authenticate"
-
-
-end Std.Http.Header.Name
+import LeanIO.Data.HeaderName
 
 namespace Std.Http.Header.Value
 
@@ -98,8 +91,8 @@ Example:
 def auth (config: AuthConfig) (next: HandlerSig) : HandlerSig := fun req => do
   let some headerAuth := extractAuthorization req |
     match config with
-    | .basic _ =>  Response.unauthorized |>.header Header.Name.wwwAuthenticate Header.Value.basicUnauthorized  |>.empty
-    | .bearer _ =>  Response.unauthorized |>.header Header.Name.wwwAuthenticate Header.Value.bearerUnauthorized |>.empty
+    | .basic _ =>  Response.unauthorized |>.header .wwwAuthenticate .basicUnauthorized  |>.empty
+    | .bearer _ =>  Response.unauthorized |>.header .wwwAuthenticate .bearerUnauthorized |>.empty
   match config with
   | .basic validate =>
     match parseBasicAuth headerAuth with

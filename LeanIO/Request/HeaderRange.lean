@@ -1,6 +1,7 @@
 import Std.Async.ContextAsync
 import LeanIO.Router.Route
 import LeanIO.Request.FromRequestParts
+import LeanIO.Data.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Async
@@ -50,7 +51,7 @@ private def parseRange (val : String) : Option (Array Range) := do
 
 instance : FromRequestParts HeaderRange where
   from_request_parts req :=
-    match req.line.headers.get? (Header.Name.mk "range") with
+    match req.line.headers.get? .range with
     | some value => .ok { ranges := parseRange value.value }
     | none => .ok { ranges := none }
 

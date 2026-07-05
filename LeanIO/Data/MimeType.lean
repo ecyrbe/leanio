@@ -93,6 +93,31 @@ def extForMime (mime : String) : String :=
   | "application/x-www-form-urlencoded" => "txt"
   | _ => "bin"
 
+def mimeType (path : System.FilePath) : Header.Value :=
+  match path.extension with
+  | "mp4"  => MimeType.videoMp4
+  | "webm" => MimeType.videoWebm
+  | "ogg"  => MimeType.videoOgg
+  | "mov"  => MimeType.videoQuicktime
+  | "avi"  => MimeType.videoAvi
+  | "mkv"  => MimeType.videoMkv
+  | "mp3"  => MimeType.audioMpeg
+  | "wav"  => MimeType.audioWav
+  | "flac" => MimeType.audioFlac
+  | "pdf"  => MimeType.applicationPdf
+  | "html" => MimeType.textHtml
+  | "css"  => MimeType.textCss
+  | "js"   => MimeType.textJavascript
+  | "json" => MimeType.applicationJson
+  | "png"  => MimeType.imagePng
+  | "jpg"  | "jpeg" => MimeType.imageJpeg
+  | "gif"  => MimeType.imageGif
+  | "svg"  => MimeType.imageSvg
+  | "webp" => MimeType.imageWebp
+  | "ico"  => MimeType.imageIcon
+  | "txt"  => MimeType.textPlain
+  | _      => MimeType.octetStream
+
 end LeanIO.MimeType
 
 namespace Std.Http.Headers

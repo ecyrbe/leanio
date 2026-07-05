@@ -2,11 +2,10 @@ import Lean
 import LeanIO.Utils
 import LeanIO.Data.ChunkBuffer
 import LeanIO.Data.String
+import LeanIO.Data.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Slice
-
-abbrev contentDisposition := Header.Name.mk "content-disposition"
 
 /-- Parse a header line "Name: value" into a `(Name, Value)` pair. Splits on first colon only. -/
 def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
@@ -69,13 +68,13 @@ def extractParam (params : String) (key : String) : Option String :=
 
 /-- Extract a parameter value from a form-data content disposition header. -/
 def filenameParam (hds : Headers) : Option String :=
-  match hds.get? contentDisposition with
+  match hds.get? .contentDisposition with
   | none => none
   | some v => extractParam v.value "filename"
 
 /-- Extract a parameter value from a form-data content disposition header. -/
 def nameParam (hds : Headers) : Option String :=
-  match hds.get? contentDisposition with
+  match hds.get? .contentDisposition with
   | none => none
   | some v => extractParam v.value "name"
 

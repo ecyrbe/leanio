@@ -54,7 +54,7 @@ def parseBearer (auth: String): Option String :=
   auth.dropPrefix? "Bearer " |>.map (·.trimAscii |>.toString)
 
 def extractAuthorization (request: Request α): Option String :=
-  request.line.headers.get? Header.Name.authorization |>.map (·.value)
+  request.line.headers.get? .authorization |>.map (·.value)
 
 end LeanIO.Utils
 

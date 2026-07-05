@@ -1,43 +1,14 @@
 import Std.Async.ContextAsync
 import LeanIO.Response.IntoResponse
+import LeanIO.Response.File.Utils
 import LeanIO.Request.HeaderRange
 import LeanIO.Data.MimeType
+import LeanIO.Data.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Async
 
-private def headerContentType  : Header.Name := Header.Name.mk "content-type"
-private def headerAcceptRanges : Header.Name := Header.Name.mk "accept-ranges"
-private def headerContentRange : Header.Name := Header.Name.mk "content-range"
-
 private def headerBytes        : Header.Value := Header.Value.mk "bytes"
-
-private def mimeType (path : System.FilePath) : Header.Value :=
-  match path.extension with
-  | "mp4"  => MimeType.videoMp4
-  | "webm" => MimeType.videoWebm
-  | "ogg"  => MimeType.videoOgg
-  | "mov"  => MimeType.videoQuicktime
-  | "avi"  => MimeType.videoAvi
-  | "mkv"  => MimeType.videoMkv
-  | "mp3"  => MimeType.audioMpeg
-  | "wav"  => MimeType.audioWav
-  | "flac" => MimeType.audioFlac
-  | "pdf"  => MimeType.applicationPdf
-  | "html" => MimeType.textHtml
-  | "css"  => MimeType.textCss
-  | "js"   => MimeType.textJavascript
-  | "json" => MimeType.applicationJson
-  | "png"  => MimeType.imagePng
-  | "jpg"  | "jpeg" => MimeType.imageJpeg
-  | "gif"  => MimeType.imageGif
-  | "svg"  => MimeType.imageSvg
-  | "webp" => MimeType.imageWebp
-  | "ico"  => MimeType.imageIcon
-  | "txt"  => MimeType.textPlain
-  | _      => MimeType.octetStream
-
-abbrev FileResponse := ContextAsync (Response Body.Any)
 
 /--
 A file on disk served with optional `Range` support for efficient seeking.
@@ -81,20 +52,6 @@ private def pickRange (ranges : HeaderRange) (fileSize : Nat) : Option (Nat × N
       some (start, len)
     else none
 
-private def sendRangeStream (handle : IO.FS.Handle) (knownLen : Nat) (stream : Body.Stream) : Async Unit := do
-  try
-    let s := IO.FS.Stream.ofHandle handle
-    stream.setKnownSize (some (.fixed knownLen))
-    let mut remaining := knownLen
-    while remaining > 0 do
-      let n := min chunkSize remaining
-      let bytes ← s.read (USize.ofNat n)
-      if bytes.isEmpty then break
-      stream.send { data := bytes }
-      remaining := remaining - bytes.size
-  finally
-    stream.close
-
 private def skipBytes (handle : IO.FS.Handle) (n : Nat) : IO Unit := do
   let mut skipped := 0
   while skipped < n do
@@ -114,9 +71,9 @@ instance : IntoResponse RangeFile where
       match pickRange file.ranges fileSize with
       | none =>
         Response.ok
-          |>.header headerContentType (mimeType file.path)
-          |>.header headerAcceptRanges headerBytes
-          |>.stream (sendRangeStream handle fileSize)
+          |>.header .contentType (MimeType.mimeType file.path)
+          |>.header .acceptRanges headerBytes
+          |>.stream (sendFileStream handle fileSize)
       | some (start, len) =>
         if start >= fileSize then
           Response.new.status .rangeNotSatisfiable
@@ -126,9 +83,9 @@ instance : IntoResponse RangeFile where
           skipBytes handle start
           let endByte := start + len - 1
           Response.new.status .partialContent
-            |>.header headerContentType (mimeType file.path)
-            |>.header headerAcceptRanges headerBytes
+            |>.header .contentType (MimeType.mimeType file.path)
+            |>.header .acceptRanges headerBytes
             |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
-            |>.stream (sendRangeStream handle len)
+            |>.stream (sendFileStream handle len)
 
 end LeanIO
