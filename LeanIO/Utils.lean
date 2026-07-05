@@ -48,7 +48,7 @@ def base64DecodeString (encoded : String) : Option String := do
 def parseBasicAuth (auth: String): Option (String × Redacted) := do
   let basic ← auth.dropPrefix? "Basic " |>.map (·.trimAscii |>.copy)
   let decoded ← base64DecodeString basic
-  decoded.splitOnce ':' |>.map fun (a,b) => (a,↑b)
+  decoded.splitOnce ':' |>.map fun (a,b) => (a.toString,↑b.toString)
 
 def parseBearer (auth: String): Option String :=
   auth.dropPrefix? "Bearer " |>.map (·.trimAscii |>.toString)

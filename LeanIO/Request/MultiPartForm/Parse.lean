@@ -33,12 +33,6 @@ abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
 abbrev crlf : ByteArray := "\r\n".toUTF8
 abbrev endMarker : ByteArray := "--\r\n".toUTF8
 
-def extractBoundary (contentType : String) : Option String :=
-  (contentType.split (· = ';')).toList.filterMap (fun s =>
-    (s.toString.trimAscii.dropPrefix? "boundary=").map fun val =>
-      val.takeWhile (fun c => c ≠ ';' && c ≠ ' ' && c ≠ '\"') |>.toString)
-  |>.head?
-
 /-- Build a generated filename: `{name}{counter}.{ext}`. -/
 def generatedFilename (name : String) (counter : Nat) (mime : String) : String :=
   s!"{name}{counter}.{extForMime mime}"
@@ -77,9 +71,9 @@ def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option Multip
 
   let headerBytes ← readUntil inner crlfcrlfSearch
   let some hds := parseHeaders headerBytes | return ← stop inner
-  let some name := contentDispositionName hds | return ← stop inner
+  let some name := nameParam hds | return ← stop inner
   let contentType := headerContentType hds
-  match contentDispositionFilename hds with
+  match filenameParam hds with
   | some filename =>
     return some (← fileEntry inner name filename contentType hds)
   | none =>

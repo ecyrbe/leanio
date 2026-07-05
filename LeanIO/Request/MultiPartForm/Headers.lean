@@ -30,30 +30,54 @@ def parseHeaders (hdrBytes : ByteArray) : Option Headers := do
       | none => none
     ) (∅ : Headers)
 
-/-- Extract a quoted parameter value from a Content-Disposition value string. -/
-def extractParam (params : String) (key : String) : Option String :=
-  let keySuffix := key ++ "=\""
-  (params.split (· == ';')).findSome? fun part =>
-    let trimmed := part.trimAscii
-    trimmed.dropPrefix? keySuffix
-    |>.map (·.takeWhile (· ≠ '\"'))
-    |>.bind fun s =>
-        if s.isEmpty then
-          none
+/--
+Parse a parameter value, handling quoted strings with escaped quotes.
+
+- `abc` → `abc`
+- `"abc"` → `abc`
+- `"ab\"c"` → `ab"c"
+-/
+def parseParamValue (s : String.Slice) : Option String :=
+  let inner := s.toString
+  if inner.startsWith "\"" then
+    let chars := inner.toRawSubstring.drop 1
+    let rec go (i : Nat) (acc : String) : Option String :=
+      if i ≥ chars.bsize then none
+      else
+        let c := chars.get ⟨i⟩
+        if c == '\\' then
+          if i + 1 < chars.bsize then
+            go (i + 2) (acc ++ toString (chars.get ⟨i + 1⟩))
+          else none
+        else if c == '\"' then
+          some acc
         else
-          some s.toString
+          go (i + 1) (acc ++ toString c)
+    go 0 ""
+  else
+    let unquoted := inner.takeWhile (fun c => c ≠ ';' && c ≠ ' ' && c ≠ ',')
+    some unquoted.toString
 
-/-- Extract the `name` parameter from Content-Disposition headers. -/
-def contentDispositionName (hds : Headers) : Option String :=
-  match hds.get? contentDisposition with
-  | none => none
-  | some v => extractParam v.value "name"
+/-- Extract a parameter from a semicolon-separated header value (Content-Type, Content-Disposition, etc). -/
+def extractParam (params : String) (key : String) : Option String :=
+  let keySuffix := key ++ "="
+  params.split (· == ';')
+  |>.findSome? (fun part =>
+    part.trimAscii.dropPrefix? keySuffix
+    |>.bind parseParamValue)
+  |>.bind fun s => if s.isEmpty then none else some s
 
-/-- Extract the `filename` parameter from Content-Disposition headers. -/
-def contentDispositionFilename (hds : Headers) : Option String :=
+/-- Extract a parameter value from a form-data content disposition header. -/
+def filenameParam (hds : Headers) : Option String :=
   match hds.get? contentDisposition with
   | none => none
   | some v => extractParam v.value "filename"
+
+/-- Extract a parameter value from a form-data content disposition header. -/
+def nameParam (hds : Headers) : Option String :=
+  match hds.get? contentDisposition with
+  | none => none
+  | some v => extractParam v.value "name"
 
 /-- Extract the Content-Type from headers, defaulting to `text/plain` per RFC 2046 §5.1. -/
 def headerContentType (hds : Headers) : String :=

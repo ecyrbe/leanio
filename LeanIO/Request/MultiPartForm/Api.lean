@@ -66,7 +66,7 @@ fully buffered in memory. The file is created if it does not exist.
 ## Example
 
 ```
-file.save s!"uploads/{file.filename}"
+file.save <| dir / file.filename
 ```
 -/
 def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit := do
@@ -95,7 +95,7 @@ instance : FromRequestBody MultiPartForm where
     | .error e => return .error e
     | .ok _ => pure ()
     let some contentType := req.line.headers.get? .contentType | return .error "missing Content-Type header"
-    let some boundary := extractBoundary (toString contentType) | return .error "failed to extract boundary from content-type"
+    let some boundary := extractParam (toString contentType) "boundary" | return .error "failed to extract boundary from content-type"
     let boundSep := ("\r\n--" ++ boundary).toUTF8
     let inner : MultipartInner := {
         boundStart := boundSep.extract 2 boundSep.size
