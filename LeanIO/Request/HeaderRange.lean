@@ -25,29 +25,18 @@ structure HeaderRange where
   ranges : Option (Array Range)
 deriving Inhabited
 
-private def parseOne (spec : String) : Option Range := do
-  let spec := spec.trimAscii
-  if spec.startsWith "-" then
-    let n ← spec.drop 1 |>.trimAscii |>.toNat?
-    some { start := none, stop := some n }
-  else if spec.endsWith "-" then
-    let n ← spec.dropEnd 1 |>.trimAscii |>.toNat?
-    some { start := some n, stop := none }
-  else
-    let parts := (spec.split (· == '-')).toList
-    if parts.length == 2 then
-      let s ← parts[0]? |>.bind (·.toString.trimAscii.toNat?)
-      let e ← parts[1]? |>.bind (·.toString.trimAscii.toNat?)
-      some { start := some s, stop := some e }
-    else
-      failure
+private def parseOne (spec : String.Slice) : Option Range := do
+    match (spec.split (· == '-')).toList with
+    | [a, b] =>
+      match a.trimAscii.toNat?,b.trimAscii.toNat? with
+      | some a, some b => some ⟨some a, some b⟩
+      | some a, none => some ⟨some a, none⟩
+      | none, some b => some ⟨none, some b⟩
+      | none,none => none
+    | _ => none
 
-private def parseRange (val : String) : Option (Array Range) := do
-  let s := val.trimAscii
-  unless s.startsWith "bytes=" do failure
-  let specs := (s.drop 6 |>.split (· == ',')).toList |>.map (·.toString)
-  let ranges ← specs.mapM parseOne
-  pure (ranges.toArray)
+private def parseRange (val : String) : Option (Array Range) :=
+  val.trimAscii.dropPrefix? "bytes=" >>= (·.split (· == ',') |>.toArray |>.mapM parseOne)
 
 instance : FromRequestParts HeaderRange where
   from_request_parts req :=
