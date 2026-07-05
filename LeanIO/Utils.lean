@@ -1,16 +1,17 @@
-import Std.Http
-import LeanIO.Data.Redacted
+module
+
+public import LeanIO.Data.Redacted
 import LeanIO.Data.String
 
 namespace LeanIO.Utils
-open Std.Http
+open LeanIO
 
-def formatNanos (nanos : Nat) : String :=
+public def formatNanos (nanos : Nat) : String :=
   if nanos ≥ 1_000_000 then s!"{nanos / 1_000_000}ms"
   else if nanos ≥ 1_000 then s!"{nanos / 1_000}µs"
   else "< 1µs"
 
-private def charToValue (c : Char) : Option UInt8 :=
+def charToValue (c : Char) : Option UInt8 :=
   if 'A' ≤ c && c ≤ 'Z' then some <| c.toNat - 'A'.toNat |>.toUInt8
   else if 'a' ≤ c && c ≤ 'z' then some <| 26 + c.toNat - 'a'.toNat |>.toUInt8
   else if '0' ≤ c && c ≤ '9' then some <| 52 + c.toNat - '0'.toNat |>.toUInt8
@@ -19,7 +20,7 @@ private def charToValue (c : Char) : Option UInt8 :=
   else if c = '=' then some 0
   else none
 
-def base64Decode (encoded : String) : Option ByteArray := do
+public def base64Decode (encoded : String) : Option ByteArray := do
   let mut decoded := ByteArray.empty
   let mut chars := encoded.toList
   let rem := chars.length % 4
@@ -41,55 +42,53 @@ def base64Decode (encoded : String) : Option ByteArray := do
     | _ => none -- should not happen
   return decoded
 
-def base64DecodeString (encoded : String) : Option String := do
+public def base64DecodeString (encoded : String) : Option String := do
   String.fromUTF8? <| ← base64Decode encoded
 
 
-def parseBasicAuth (auth: String): Option (String × Redacted) := do
+public def parseBasicAuth (auth: String): Option (String × Redacted) := do
   let basic ← auth.dropPrefix? "Basic " |>.map (·.trimAscii |>.copy)
   let decoded ← base64DecodeString basic
   decoded.splitOnce ':' |>.map fun (a,b) => (a.toString,↑b.toString)
 
-def parseBearer (auth: String): Option String :=
+public def parseBearer (auth: String): Option String :=
   auth.dropPrefix? "Bearer " |>.map (·.trimAscii |>.toString)
 
-def extractAuthorization (request: Request α): Option String :=
-  request.line.headers.get? .authorization |>.map (·.value)
 
 end LeanIO.Utils
 
 namespace LeanIO
 
-structure Search (α: Type) where
+public structure Search (α: Type) where
   needle: α
   LPS : Array Nat
 
 namespace Search
 
-  class Sized (α: Type) where
+  public class Sized (α: Type) where
     size : α → Nat
 
-  instance : Sized ByteArray where
+  public instance : Sized ByteArray where
    size:= ByteArray.size
 
   @[specialize]
-def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (needle: α) : Search α:= Id.run do
-  let mut LPS := Array.replicate (Sized.size needle) 0
-  let mut len := 0
-  let mut i := 1
-  while i < (Sized.size needle) do
-    if needle[i]! = needle[len]! then
-      len := len + 1
-      LPS := LPS.set! i len
-      i := i + 1
-    else if len = 0 then
-      i := i + 1
-    else
-      len := LPS[len - 1]!
-  return {needle, LPS}
+  public def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (needle: α) : Search α:= Id.run do
+    let mut LPS := Array.replicate (Sized.size needle) 0
+    let mut len := 0
+    let mut i := 1
+    while i < (Sized.size needle) do
+      if needle[i]! = needle[len]! then
+        len := len + 1
+        LPS := LPS.set! i len
+        i := i + 1
+      else if len = 0 then
+        i := i + 1
+      else
+        len := LPS[len - 1]!
+    return {needle, LPS}
 
   @[specialize]
-  partial def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
+  public partial def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
     if Sized.size self.needle = 0 then
       return start
     else if start + Sized.size self.needle > (Sized.size haystack) then
@@ -107,7 +106,7 @@ def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhab
   /-- Compute the longest prefix-suffix overlap between the end of `haystack` and `needle`.
       Returns the number of trailing bytes that form a prefix of `needle`.
       Runs KMP on only the last `needle.size - 1` bytes. -/
-  partial def terminalOverlap {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat) : Nat :=
+  public partial def terminalOverlap {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat) : Nat :=
     let n := Sized.size self.needle
     if n = 0 then 0
     else

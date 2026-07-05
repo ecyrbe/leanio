@@ -34,6 +34,9 @@ def requestLogger (next : HandlerSig) : HandlerSig := fun req => do
   IO.println s!"← {status} ({formatNanos (end_ - start)})"
   return res
 
+def extractAuthorization (request: Request α): Option String :=
+  request.line.headers.get? .authorization |>.map (·.value)
+
 /--
 Creates a middleware that injects `data` into every request's extensions.
 Use with a wrapper struct that derives `TypeName`:
