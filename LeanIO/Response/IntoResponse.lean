@@ -10,6 +10,9 @@ open Std.Http Std.Async Lean
 public class IntoResponse (α : Type) where
   into_response : ContextAsync α → ContextAsync (Response Body.Any)
 
+public class IntoResponseExt (α : Type) where
+  into_response_ext : Request Body.Stream → ContextAsync α → ContextAsync (Response Body.Any)
+
 public instance : IntoResponse (Response Body.Any) where
   into_response resp := resp
 

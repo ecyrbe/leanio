@@ -13,7 +13,7 @@ Adapts a user-defined handler function into the router's internal `HandlerSig`.
 A handler function can take up to one body parameter (extracted from the request
 body, implementing `FromRequestBody`) followed by any number of parts parameters
 (extracted from path, headers, query, or extensions, implementing `FromRequestParts`).
-The handler must return a `ContextAsync R` where `R` implements `IntoResponse`.
+The handler must return a `ContextAsync R` where `R` implements `IntoResponse` or `IntoResponseExt`.
 
 ```lean4
 -- 0 params (sync)
@@ -50,11 +50,20 @@ private class PartsExtractor (Fn : Type) where
 instance [IntoResponse R] : Extractor (ContextAsync R) where
   extract handler _ := IntoResponse.into_response handler
 
+instance [IntoResponseExt R] : Extractor (ContextAsync R) where
+  extract handler req := IntoResponseExt.into_response_ext req handler
+
 instance [IntoResponse R] : Extractor (Unit → R) where
   extract handler _ := IntoResponse.into_response <| pure (handler ())
 
+instance [IntoResponseExt R] : Extractor (Unit → R) where
+  extract handler req := IntoResponseExt.into_response_ext req <| pure (handler ())
+
 instance [IntoResponse R] : Extractor (Unit → ContextAsync R) where
   extract handler _ := IntoResponse.into_response (handler ())
+
+instance [IntoResponseExt R] : Extractor (Unit → ContextAsync R) where
+  extract handler req := IntoResponseExt.into_response_ext req (handler ())
 
 instance [FromRequestBody P] [PartsExtractor Rest] : Extractor (P → Rest) where
   extract handler req := do
@@ -72,6 +81,9 @@ instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) whe
 
 private instance [IntoResponse R] : PartsExtractor (ContextAsync R) where
   extractParts handler _ := IntoResponse.into_response handler
+
+private instance [IntoResponseExt R] : PartsExtractor (ContextAsync R) where
+  extractParts handler req := IntoResponseExt.into_response_ext req handler
 
 private instance [FromRequestParts P] [PartsExtractor Rest] : PartsExtractor (P → Rest) where
   extractParts handler req := do
