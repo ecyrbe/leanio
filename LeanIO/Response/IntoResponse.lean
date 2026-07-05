@@ -41,6 +41,11 @@ public instance [IntoResponse ε] [IntoResponse α] : IntoResponse (Except ε α
     | .ok ok => IntoResponse.into_response <| pure ok
     | .error e => IntoResponse.into_response <| pure e
 
+public instance : IntoResponse (Status × String)  where
+  into_response sstr := do
+    let (s, str) ← sstr
+    Response.new.status s |>.text str
+
 public instance [ToJson α] : IntoResponse (Status × α)  where
   into_response sa := do
     let (s, a) ← sa
