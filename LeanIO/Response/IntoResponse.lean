@@ -46,4 +46,9 @@ public instance [ToJson α] : IntoResponse (Status × α)  where
     let (s, a) ← sa
     Response.new.status s |>.json <| Json.pretty <| toJson a
 
+public instance [ToJson α] : IntoResponse (Status × Headers × α)  where
+  into_response sha := do
+    let (s, h, a) ← sha
+    Response.new.status s |>.headers h |>.json <| Json.pretty <| toJson a
+
 end LeanIO
