@@ -4,6 +4,7 @@ import LeanIO.Response.File.Utils
 import LeanIO.Request.HeaderRange
 import LeanIO.Data.MimeType
 import LeanIO.Data.HeaderName
+import LeanIO.Data.CacheControl
 
 namespace LeanIO
 open Std.Http Std.Async
@@ -25,7 +26,10 @@ def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
 ```
 -/
 structure RangeFile where
-  path   : System.FilePath
+  new ::
+  path         : System.FilePath
+  cacheControl : Option CacheControl := some <| .publicStatic 0
+deriving Inhabited
 
 private def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (Nat × Nat) :=
   match ranges with
@@ -55,33 +59,55 @@ instance : IntoResponseExt RangeFile where
       Response.notFound |>.empty
     else
       let mdata ← file.path.metadata
-      let etag := computeETag mdata
       let fileSize := mdata.byteSize.toNat
-      if etagMatches req etag then
-        Response.new |>.status Status.notModified |>.empty
-      else
-        let handle ← IO.FS.Handle.mk file.path .read
-        let ranges := req.line.headers.get? .range |>.bind (parseRange ·.value)
-        match pickRange ranges fileSize with
-        | none =>
-          Response.ok
+      match file.cacheControl with
+      | some cacheControl =>
+        let etag := computeETag mdata
+        if etagMatches req etag then
+          Response.new |>.status Status.notModified |>.empty
+        else
+          let handle ← IO.FS.Handle.mk file.path .read
+          let ranges := req.line.headers.get? .range |>.bind (parseRange ·.value)
+          let baseResp := Response.ok
             |>.header .contentType (MimeType.mimeType file.path)
             |>.header .acceptRanges headerBytes
-            |>.header .cacheControl (Header.Value.mk "public, max-age=0, must-revalidate")
             |>.header .etag etag
-            |>.stream (sendFileStream handle fileSize)
-        | some (start, len) =>
-          if start >= fileSize then
-            Response.new.status .rangeNotSatisfiable
-              |>.header! "content-range" s!"bytes */{mdata.byteSize}"
-              |>.empty
-          else
-            skipBytes handle start
-            let endByte := start + len - 1
-            Response.new.status .partialContent
-              |>.header .contentType (MimeType.mimeType file.path)
-              |>.header .acceptRanges headerBytes
-              |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
-              |>.stream (sendFileStream handle len)
+            |>.header .cacheControl cacheControl
+          match pickRange ranges fileSize with
+          | none =>
+            baseResp |>.stream (sendFileStream handle fileSize)
+          | some (start, len) =>
+            if start >= fileSize then
+              Response.new.status .rangeNotSatisfiable
+                |>.header! "content-range" s!"bytes */{mdata.byteSize}"
+                |>.empty
+            else
+              skipBytes handle start
+              let endByte := start + len - 1
+              baseResp
+                |>.status .partialContent
+                |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
+                |>.stream (sendFileStream handle len)
+      | none =>
+          let handle ← IO.FS.Handle.mk file.path .read
+          let ranges := req.line.headers.get? .range |>.bind (parseRange ·.value)
+          let baseResp := Response.ok
+            |>.header .contentType (MimeType.mimeType file.path)
+            |>.header .acceptRanges headerBytes
+          match pickRange ranges fileSize with
+          | none =>
+            baseResp |>.stream (sendFileStream handle fileSize)
+          | some (start, len) =>
+            if start >= fileSize then
+              Response.new.status .rangeNotSatisfiable
+                |>.header! "content-range" s!"bytes */{mdata.byteSize}"
+                |>.empty
+            else
+              skipBytes handle start
+              let endByte := start + len - 1
+              baseResp
+                |>.status .partialContent
+                |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
+                |>.stream (sendFileStream handle len)
 
 end LeanIO

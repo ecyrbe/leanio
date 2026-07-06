@@ -4,6 +4,8 @@ import LeanIO.Request.HeaderRange
 import LeanIO.Data.HeaderName
 import LeanIO.Data.MimeType
 import LeanIO.Response.File.Utils
+import LeanIO.Data.CacheControl
+
 
 namespace LeanIO
 open Std.Http Std.Async
@@ -20,7 +22,10 @@ def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
 ```
 -/
 structure File where
-  path   : System.FilePath
+  new ::
+  path         : System.FilePath
+  cacheControl : Option CacheControl := some <|.publicStatic 0
+deriving Inhabited
 
 instance : IntoResponseExt File where
   into_response_ext req f := do
@@ -29,16 +34,23 @@ instance : IntoResponseExt File where
       Response.notFound |>.empty
     else
       let mdata ← file.path.metadata
-      let etag := computeETag mdata
       let fileSize := mdata.byteSize.toNat
-      if etagMatches req etag then
-        Response.new |>.status Status.notModified |>.empty
-      else
+      match file.cacheControl with
+      | some cacheControl =>
+        let etag := computeETag mdata
+        if etagMatches req etag then
+          Response.new |>.status Status.notModified |>.empty
+        else
+          let handle ← IO.FS.Handle.mk file.path .read
+          Response.ok
+            |>.header .contentType (MimeType.mimeType file.path)
+            |>.header .etag etag
+            |>.header .cacheControl cacheControl
+            |>.stream (sendFileStream handle fileSize)
+      | none =>
         let handle ← IO.FS.Handle.mk file.path .read
         Response.ok
           |>.header .contentType (MimeType.mimeType file.path)
-          |>.header .cacheControl (Header.Value.mk "public, max-age=0, must-revalidate")
-          |>.header .etag etag
           |>.stream (sendFileStream handle fileSize)
 
 end LeanIO
