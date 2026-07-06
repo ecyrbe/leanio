@@ -11,6 +11,7 @@ public inductive Directive
  | noTransform
  | maxAge (seconds: Nat)
  | mustRevalidate
+ | mustunderstand
  | proxyRevalidate
  | «private»
  | «public»
@@ -26,6 +27,7 @@ public instance : ToString Directive where
   | .noTransform => "no-transform"
   | .maxAge seconds => s!"max-age={seconds}"
   | .mustRevalidate => "must-revalidate"
+  | .mustunderstand => "must-understand"
   | .proxyRevalidate => "proxy-revalidate"
   | .private => "private"
   | .public => "public"
