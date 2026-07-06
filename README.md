@@ -48,23 +48,27 @@ later chapters provide the full API reference.
 import LeanIO
 open LeanIO.Router
 open LeanIO.Middlewares
+open Std Http Server
+open Std Async
+open Lean
+
+set_option linter.unusedVariables false
 
 /- Data model -/
 
-structure Task where
+structure Todo where
   title     : String
   completed : Bool := false
-deriving ToJson, FromJson
+deriving Inhabited, ToJson, FromJson
 
-structure TaskStore where
-  tasks       : Array Task
-  nextId      : Nat := 0
+structure TodoStore where
+  todos : Array Todo
 deriving Inhabited
 
 /- State (shared via middleware) -/
 
 structure AppState where
-  ref : IO.Ref TaskStore
+  ref : IO.Ref TodoStore
 deriving TypeName
 
 instance : FromRequestParts AppState where
@@ -75,51 +79,49 @@ instance : FromRequestParts AppState where
 
 /- Routes -/
 
-def listTasks := GET "/api/tasks" (⟨state⟩ : AppState) => do
-    return (← state.ref.get).tasks
+def listTodos := GET "/api/todos" (⟨state⟩ : AppState) => do
+    let store ← state.get
+    return store.todos
 
-def addTask := POST "/api/tasks" (⟨body⟩ : Json Task) (⟨state⟩ : AppState) => do
-    let store ← state.ref.get
-    let task  := {body with title := body.title}
-    state.ref.set { store with
-      tasks  := store.tasks.push task
-      nextId := store.nextId + 1 }
-    return (Status.created, task)
+def addTodo := POST "/api/todos" (⟨body⟩ : Json Todo) (⟨state⟩ : AppState) => do
+    let store ← state.get
+    state.set { store with todos := store.todos.push body }
+    return (Status.created, body)
 
-def toggleTask := PATCH "/api/tasks/{id}" (⟨state⟩ : AppState) (⟨id⟩ : Path Nat) => do
-    let store ← state.ref.get
-    if h : id < store.tasks.size then
-      let task := store.tasks[id]!
-      state.ref.set { store with tasks := store.tasks.set id {task with completed := ¬task.completed} }
+def toggleTodo := PATCH "/api/todos/{id}" (⟨state⟩ : AppState) (⟨id⟩ : Path Nat) => do
+    let store ← state.get
+    if h : id < store.todos.size then
+      let t := store.todos[id]!
+      state.set { store with todos := store.todos.set id {t with completed := ¬t.completed} }
       return Except.ok (Status.ok)
     else
-      return Except.error (Status.notFound, s!"task {id} not found")
+      return Except.error (Status.notFound, s!"todo {id} not found")
 
-def deleteTask := DELETE "/api/tasks/{id}" (⟨state⟩ : AppState) (⟨id⟩ : Path Nat) => do
-    let store ← state.ref.get
-    if h : id < store.tasks.size then
-      state.ref.set { store with tasks := store.tasks.eraseIdx id }
+def deleteTodo := DELETE "/api/todos/{id}" (⟨state⟩ : AppState) (⟨id⟩ : Path Nat) => do
+    let store ← state.get
+    if h : id < store.todos.size then
+      state.set { store with todos := store.todos.eraseIdx id }
       return Except.ok (Status.ok)
     else
-      return Except.error (Status.notFound, s!"task {id} not found")
+      return Except.error (Status.notFound, s!"todo {id} not found")
 
 /- Frontend — serve a SPA from disk -/
 
 def serveUI := GET "/{*rest}" (⟨rest⟩ : Path String) => do
-    let path := "public" / (if rest.isEmpty then "index.html" else rest)
+    let path : System.FilePath := "public" / rest
     return { path : RangeFile }
 
 /- Entry point -/
 
 def main : IO Unit := Async.block do
-  let ref ← IO.mkRef { tasks := #[] : TaskStore }
+  let ref ← IO.mkRef { todos := #[] : TodoStore }
   let router := Router.empty
-    |>.addRoute listTasks
-    |>.addRoute addTask
-    |>.addRoute toggleTask
-    |>.addRoute deleteTask
+    |>.addRoute listTodos
+    |>.addRoute addTodo
+    |>.addRoute toggleTodo
+    |>.addRoute deleteTodo
     |>.addRoute serveUI
-    |>.addMiddleware (← withExtension AppState { ref })
+    |>.addMiddleware (withExtension AppState { ref })
     |>.addMiddleware catchErrors
     |>.addMiddleware requestLogger
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
@@ -130,11 +132,11 @@ def main : IO Unit := Async.block do
 
 This single file contains:
 
-- **Route definitions** — four CRUD endpoints under `/api/tasks` and a catch-all
+- **Route definitions** — four CRUD endpoints under `/api/todos` and a catch-all
   that serves static files from the `public/` directory.
-- **Extractors** — `(⟨body⟩ : Json Task)` deserializes the JSON body; `(⟨id⟩ : Path Nat)`
-  pulls path parameters; `(⟨state⟩ : AppState)` injects shared state; `(⟨rest⟩ : Path String)`
-  captures the wildcard path.
+- **Extractors** — `(⟨body⟩ : Json Todo)` deserializes the JSON body; `(⟨id⟩ : Path Nat)`
+  pulls path parameters; `(⟨state⟩ : AppState)` destructures the middleware state to
+  the `IO.Ref` directly; `(⟨rest⟩ : Path String)` captures the wildcard path.
 - **Responses** — handlers return `ToJson` values, `Status × T` tuples, or `Except`
   for fallible results. `{ path : RangeFile }` streams files from disk with HTTP Range
   support for video and partial requests.
@@ -813,7 +815,7 @@ def catchErrors
 Router.empty
   |>.addRoute myRoute
   |>.addMiddleware (catchErrors fun e =>
-    Response.ok.text s!"custom error: {e}")
+    Response.ok |>.text s!"custom error: {e}")
 ```
 
 #### `auth`
@@ -867,7 +869,7 @@ def stateMiddleware := do
 
 -- Access in handler:
 def getData := GET "/data" (⟨s⟩ : AppState) => do
-    let db ← s.ref.get
+    let db ← s.get
     return db.items
 ```
 
