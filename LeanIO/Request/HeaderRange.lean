@@ -35,13 +35,13 @@ private def parseOne (spec : String.Slice) : Option Range := do
       | none,none => none
     | _ => none
 
-private def parseRange (val : String) : Option (Array Range) :=
+def parseRange (val : String) : Option (Array Range) :=
   val.trimAscii.dropPrefix? "bytes=" >>= (·.split (· == ',') |>.toArray |>.mapM parseOne)
 
 instance : FromRequestParts HeaderRange where
   from_request_parts req :=
     match req.line.headers.get? .range with
-    | some value => .ok { ranges := parseRange value.value }
+    | some range => .ok { ranges := parseRange range.value }
     | none => .ok { ranges := none }
 
 end LeanIO

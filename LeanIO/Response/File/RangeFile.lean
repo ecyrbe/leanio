@@ -13,7 +13,6 @@ private def headerBytes        : Header.Value := Header.Value.mk "bytes"
 /--
 A file on disk served with optional `Range` support for efficient seeking.
 
-Uses the `HeaderRange` extractor to parse the `Range` request header and
 returns the appropriate `206 Partial Content` with `Content-Range` for
 range requests, or the full file otherwise.
 
@@ -21,18 +20,17 @@ range requests, or the full file otherwise.
 (not chunked transfer encoding).
 
 ```lean
-def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) (ranges : HeaderRange) => do
-  return { path := "static" / rest, ranges : RangeFile }
+def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
+  return { path := "static" / rest : RangeFile }
 ```
 -/
 structure RangeFile where
   path   : System.FilePath
-  ranges : HeaderRange
 
 private def chunkSize : Nat := 8192
 
-private def pickRange (ranges : HeaderRange) (fileSize : Nat) : Option (Nat × Nat) :=
-  match ranges.ranges with
+private def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (Nat × Nat) :=
+  match ranges with
   | none => none
   | some rs =>
     if _ : rs.size > 0 then
@@ -59,8 +57,8 @@ private def skipBytes (handle : IO.FS.Handle) (n : Nat) : IO Unit := do
     if bytes.isEmpty then break
     skipped := skipped + bytes.size
 
-instance : IntoResponse RangeFile where
-  into_response f := do
+instance : IntoResponseExt RangeFile where
+  into_response_ext req f := do
     let file ← f
     if !(←file.path.pathExists) || (←file.path.isDir) then
       Response.notFound |>.empty
@@ -68,7 +66,8 @@ instance : IntoResponse RangeFile where
       let mdata ← file.path.metadata
       let fileSize := mdata.byteSize.toNat
       let handle ← IO.FS.Handle.mk file.path .read
-      match pickRange file.ranges fileSize with
+      let ranges := req.line.headers.get? .range |>.bind (parseRange ·.value)
+      match pickRange ranges fileSize with
       | none =>
         Response.ok
           |>.header .contentType (MimeType.mimeType file.path)

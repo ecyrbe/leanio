@@ -63,12 +63,12 @@ def postComment := POST "/videos/{name}/comments"
   ref.set (cs.push comment)
   return (Status.created, comment)
 
-def index := GET "/" (ranges : HeaderRange) => do
-  return { path := staticDir / "index.html", ranges : RangeFile }
+def index := GET "/" => do
+  return { path := staticDir / "index.html" : File }
 
-def serveStatic := GET "/{*rest}" (⟨_⟩ : Path String) (ranges : HeaderRange) (p : URI.Path) => do
+def serveStatic := GET "/{*rest}" (⟨_⟩ : Path String) (p : URI.Path) => do
   let decoded := String.intercalate "/" (p.toDecodedSegments.toList)
-  return { path := staticDir / decoded, ranges : RangeFile }
+  return { path := staticDir / decoded : RangeFile }
 
 def main : IO Unit := Async.block do
   let apiRouter : Router := Router.empty
