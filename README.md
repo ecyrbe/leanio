@@ -7,268 +7,340 @@
 [![Version](https://img.shields.io/badge/version-0.3.0-2ea44f)](./lakefile.toml)
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
-A lightweight, composable HTTP router and server toolkit for Lean 4.
-
-Built on `Std.Http.Server` with an axum-inspired extractor DSL,
-middleware chaining, and sub-router mounting under path prefixes.
+A composable HTTP toolkit for Lean 4. Built on `Std.Http.Server` with an
+axum-inspired extractor DSL, middleware chaining, and sub-router mounting.
 
 </div>
 
 ## Highlights
 
-- 🧭 **Routing DSL** — term macros `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, etc.
-- 🔗 **Path extractors** — `Path Nat`, `Path (Nat × String)`, catch-all `Path String`
-- 📦 **Body extractors** — `Json T` auto-deserializes with `FromJson`, `PlainText` for raw strings, `Form` for URL-encoded data, `MultiPartForm` for streaming file uploads
-- 📤 **Response dispatch** — `IntoResponse` maps return types to HTTP responses (String, JSON, status codes)
-- 🌿 **Catch-all routes** — `{*rest}` captures the remainder of the path
-- 🧩 **Sub-router mounting** — merge sub-routers under a prefix via `addRouter`
-- 🧪 **Middleware chaining** — router, sub-router, and route-level middleware
-- ⚡ **Optimized route matching** — routes and sub-routers pre-merged for fast lookup
-- 🧪 **Tested** — unit tests + 16 integration tests
+- ⚡ **Route macros** — 41 HTTP methods as term macros with compile-time pattern validation
+- 🧩 **Extractors** — typed parameters injected into handlers: `Path Nat`, `Json T`, `Query T`, `Form α`, `MultiPartForm`
+- 📤 **Streaming uploads** — zero-copy multipart parser
+- 📁 **File serving** — `File` streams from disk with MIME detection; `RangeFile` adds `206 Partial Content` and `Accept-Ranges`
+- 🏷️ **ETag caching** — `CacheControl` directives with presets; weak ETags for files (mtime+size) and JSON (String.hash)
+- 🧪 **Middlewares** — wraps both request and response; built-in logging, error catching, and auth
+- 🏗️ **Router composition** — segment trie with O(depth) lookup, literal > param > wildcard priority, sub-routers merged at construction time
+- 🎯 **IntoResponse** — return `String`, `Status × T`, `Except ε α`, `File`, or implement your own — all streamed, never buffered
+- 🚀 **Deriving** — `FromPath`, `FromQuery`, `FromForm` auto-generated from struct field names
 
-## Quick Start
+## Contents
+
+1. [Overview](#1-overview)
+2. [Routes](#2-routes)
+3. [Extractors](#3-extractors)
+4. [Responses](#4-responses)
+5. [Middleware](#5-middleware)
+6. [Router](#6-router)
+7. [Reference](#7-reference)
+
+---
+
+## 1. Overview
+
+This chapter walks through building a complete application — a REST API for a task list,
+with a browser frontend served from disk. Every concept is presented in context first;
+later chapters provide the full API reference.
+
+### 1.1 A complete application
 
 ```lean
 import LeanIO
 open LeanIO.Router
+open LeanIO.Middlewares
 
-def hello := GET "/hello" =>
-    "Hello, world!"
+/- Data model -/
 
-def main : IO Unit := Async.block do
-  let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
-  let router : Router := Router.empty
-    |>.addRoute hello
-    |>.addMiddleware requestLogger
-    |>.addMiddleware catchErrors
-  let server ← Server.serve addr router
-  server.waitShutdown
-```
+structure Task where
+  title     : String
+  completed : Bool := false
+deriving ToJson, FromJson
 
-Handlers return plain values — `String` becomes `200 text/plain`,
-`ToJson` types become `200 application/json`, `()` becomes `204 No Content`.
+structure TaskStore where
+  tasks       : Array Task
+  nextId      : Nat := 0
+deriving Inhabited
 
-## Route definitions
+/- State (shared via middleware) -/
 
-Routes are defined with term macros. Bind parameters with `(⟨pat⟩ : Extractor)`:
-
-```lean
--- plain handler — returns a String
-def hello := GET "/hello" =>
-    "Hello, world!"
-
--- path parameter extraction
-def getItem := GET "/items/{id}" (⟨id⟩ : Path Nat) => do
-    return someItemDb.find id
-
--- JSON body extraction
-def createItem := POST "/items" (⟨body⟩ : Json CreateItemRequest) => do
-    return (Status.created, Item.of body)
-
--- combined: body + path params
-def updateItem := PUT "/items/{id}" (⟨body⟩ : Json UpdateRequest) (⟨id⟩ : Path Nat) => do
-    return Item.update id body
-
--- two path params
-def getComment := GET "/items/{id}/comments/{cId}" (⟨id, cId⟩ : Path (Nat × Nat)) => do
-    return Comment.find id cId
-
--- catch-all rest param
-def serveFiles := GET "/files/{*rest}" (⟨rest⟩ : Path String) =>
-    File.serve rest
-```
-
-Handlers run in `ContextAsync` — use `do` for async operations.
-
-### Custom state extractors
-
-Inject middleware state and extract it with `FromRequestParts`:
-
-```lean
 structure AppState where
-  ref : IO.Ref Db
+  ref : IO.Ref TaskStore
 deriving TypeName
 
 instance : FromRequestParts AppState where
   from_request_parts req :=
     match req.extensions.get AppState with
     | some s => .ok s
-    | none   => .error "app state not installed"
+    | none   => .error "state not installed"
 
-def stateMiddleware := do
-  let ref ← IO.mkRef defaultDb
-  return withExtension AppState { ref }
+/- Routes -/
 
-def getData := GET "/data" (⟨s⟩ : AppState) => do
-    let db ← s.ref.get
-    return db.items
+def listTasks := GET "/api/tasks" (⟨state⟩ : AppState) => do
+    return (← state.ref.get).tasks
+
+def addTask := POST "/api/tasks" (⟨body⟩ : Json Task) (⟨state⟩ : AppState) => do
+    let store ← state.ref.get
+    let task  := {body with title := body.title}
+    state.ref.set { store with
+      tasks  := store.tasks.push task
+      nextId := store.nextId + 1 }
+    return (Status.created, task)
+
+def toggleTask := PATCH "/api/tasks/{id}" (⟨state⟩ : AppState) (⟨id⟩ : Path Nat) => do
+    let store ← state.ref.get
+    if h : id < store.tasks.size then
+      let task := store.tasks[id]!
+      state.ref.set { store with tasks := store.tasks.set id {task with completed := ¬task.completed} }
+      return Except.ok (Status.ok)
+    else
+      return Except.error (Status.notFound, s!"task {id} not found")
+
+def deleteTask := DELETE "/api/tasks/{id}" (⟨state⟩ : AppState) (⟨id⟩ : Path Nat) => do
+    let store ← state.ref.get
+    if h : id < store.tasks.size then
+      state.ref.set { store with tasks := store.tasks.eraseIdx id }
+      return Except.ok (Status.ok)
+    else
+      return Except.error (Status.notFound, s!"task {id} not found")
+
+/- Frontend — serve a SPA from disk -/
+
+def serveUI := GET "/{*rest}" (⟨rest⟩ : Path String) => do
+    let path := "public" / (if rest.isEmpty then "index.html" else rest)
+    return { path : RangeFile }
+
+/- Entry point -/
+
+def main : IO Unit := Async.block do
+  let ref ← IO.mkRef { tasks := #[] : TaskStore }
+  let router := Router.empty
+    |>.addRoute listTasks
+    |>.addRoute addTask
+    |>.addRoute toggleTask
+    |>.addRoute deleteTask
+    |>.addRoute serveUI
+    |>.addMiddleware (← withExtension AppState { ref })
+    |>.addMiddleware catchErrors
+    |>.addMiddleware requestLogger
+  let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
+  let server ← Server.serve addr router
+  IO.println "Listening on http://127.0.0.1:8080"
+  server.waitShutdown
 ```
 
-## Extractors
+This single file contains:
 
-### Path parameters
+- **Route definitions** — four CRUD endpoints under `/api/tasks` and a catch-all
+  that serves static files from the `public/` directory.
+- **Extractors** — `(⟨body⟩ : Json Task)` deserializes the JSON body; `(⟨id⟩ : Path Nat)`
+  pulls path parameters; `(⟨state⟩ : AppState)` injects shared state; `(⟨rest⟩ : Path String)`
+  captures the wildcard path.
+- **Responses** — handlers return `ToJson` values, `Status × T` tuples, or `Except`
+  for fallible results. `{ path : RangeFile }` streams files from disk with HTTP Range
+  support for video and partial requests.
+- **Middleware** — `withExtension` installs the shared store; `catchErrors` catches
+  exceptions from downstream; `requestLogger` logs every request with its response
+  status code and timing.
 
-| Pattern | Extractor | Description |
+### 1.2 The router pipeline
+
+The router receives every request first. It looks up the matching handler in the trie,
+composes the middleware chain around it, and then the composed pipeline processes the
+request. The response flows back through every middleware before being returned:
+
+```mermaid
+sequenceDiagram
+  actor C as Client
+  participant S as Server
+  participant R as Router
+  participant M1 as requestLogger
+  participant M2 as catchErrors
+  participant H as Handler
+  C->>S: TCP request
+  S->>R: onRequest
+  activate R
+  R-->>R: lookup
+  R->>M1: middleware chain
+  activate M1
+  M1->>M2: next req
+  activate M2
+  M2->>H: next req
+  activate H
+  H-->>M2: response
+  deactivate H
+  M2-->>M1: return
+  deactivate M2
+  M1-->>R: return
+  deactivate M1
+  R-->>S: response
+  deactivate R
+  S-->>C: TCP response
+```
+
+The router composes middlewares around the handler at dispatch time with `foldl`
+(last added runs outermost). Each middleware sees the request on the way in
+and the response on the way out.
+
+Extractors run as part of handler invocation — route parameters are captured from
+the path during trie lookup and stored in request extensions. Body extractors read
+from the underlying `Body.Stream`.
+
+### 1.3 What's next
+
+| To... | Read chapter |
+|---|---|
+| Define routes with path parameters, compile-time validation | [2. Routes](#2-routes) |
+| Extract path params, JSON bodies, forms, file uploads, queries | [3. Extractors](#3-extractors) |
+| Return strings, JSON, status codes, files, cached responses | [4. Responses](#4-responses) |
+| Add logging, error handling, auth, shared state | [5. Middleware](#5-middleware) |
+| Compose sub-routers under path prefixes | [6. Router](#6-router) |
+| Control browser and CDN caching behavior | [7. Cache control](#7-cache-control) |
+| All HTTP methods, utility types, examples | [8. Reference](#8-reference) |
+
+---
+
+## 2. Routes
+
+A route is a value of type `Route`. It pairs an HTTP method, a path pattern, and a
+handler function. Routes are created via **term macros** — the macro expands pattern
+syntax, validates parameters at compile time, and wraps the handler with extractor logic.
+
+### 2.1 Route macro
+
+```
+METHOD "pattern" extractor ... extractor => handler-body
+```
+
+- `METHOD` — one of 41 HTTP method identifiers (see [8.1](#81-http-methods)).
+- `"pattern"` — a string literal starting with `/`, possibly containing path parameters.
+- `extractor` — one or more `(⟨name⟩ : Type)` binders (see chapter 3).
+- `handler-body` — a `ContextAsync R` or `R` expression where `R` implements `IntoResponse`.
+
+The macro expands to a `Route` value:
+
+```lean
+structure Route where
+  method      : Method
+  pat         : RoutePattern
+  handler     : HandlerSig
+  middlewares : List (HandlerSig → HandlerSig) := []
+```
+
+#### Pattern syntax
+
+| Syntax | Segment | Extractor |
 |---|---|---|
-| `{id}` | `Path Nat` | Single typed param |
-| `{a}/{b}` | `Path (Nat × String)` | Multiple params as tuple |
-| `{a}/{b}` | `Path MyStruct` | Named params deserialized into a struct via `deriving FromPath` |
-| `{*rest}` | `Path String` | Catch-all (must be last) |
+| `/todos` | `lit "todos"` | — |
+| `{id}` | `param "id"` | `Path Nat`, `Path String`, etc. |
+| `{*rest}` | `rest "rest"` | `Path String` |
 
-The macro enforces a compile-time check: if the pattern has path parameters,
-at least one binder must be a `Path` extractor.
+Param names must start with a letter or underscore and contain only alphanumeric
+characters or underscores. The macro rejects invalid patterns at compile time.
 
-### Body extractors
+```lean
+-- ✓ Valid
+GET "/user/{id}" ...
+GET "/posts/{year}/{month}" ...
+GET "/files/{*path}" ...
 
-| Extractor | From | Validates |
-|---|---|---|
-| `Json T` | Request body | `Content-Type: application/json` + `FromJson T` |
-| `PlainText` | Request body | `Content-Type: text/plain` |
-| `Form α` | Request body | `Content-Type: application/x-www-form-urlencoded` + `FromForm α` |
-| `MultiPartForm` | Request body | `Content-Type: multipart/form-data` |
+-- ✗ Compile-time error
+GET "no-slash" ...            -- must start with /
+GET "/{*rest}/suffix" ...     -- rest must be last segment
+GET "/{3bad}" ...             -- param name cannot start with a digit
+```
 
-### Query extractors
+Multiple parameters are extracted by position unless a named struct is used
+(see §3.1.3).
 
-| Extractor | From | Description |
-|---|---|---|
-| `Query T` | Request URI query string | Deserializes query params into `T` via `FromQuery T` |
+```lean
+GET "/a/{p1}/b/{p2}" (⟨x, y⟩ : Path (Nat × String)) ...  -- positional
+GET "/a/{p1}/b/{p2}" (⟨ids⟩     : Path TodoIds) ...       -- by field name
+```
 
-### Other extractors
+### 2.2 Adding routes to a router
 
-`FromRequestParts` instances for raw request metadata:
+Routes are added to a `Router` via the pipe-builder combinator `.addRoute`:
 
-- `Method` — HTTP method (`GET`, `POST`, ...)
-- `Version` — HTTP version
-- `Headers` — request headers
-- `URI.Path` — request path
-- `URI.Query` — query string
-- `RequestTarget` — full request URI
-- `HeaderRange` — parses the `Range` request header (never errors, returns `none` on missing/parse failure)
+```lean
+Router.empty
+  |>.addRoute listTasks
+  |>.addRoute addTask
+```
 
-### Custom extractors
+Each route is merged into the trie at construction time. See chapter 6 for details on
+router composition and sub-router mounting.
 
-#### From request parts (sync)
+### 2.3 Inline routes
+
+Routes do not need to be named:
+
+```lean
+Router.empty
+  |>.addRoute (GET "/healthz" => "ok")
+  |>.addRoute (POST "/echo" (⟨body⟩ : Json Nat) => return body)
+```
+
+---
+
+## 3. Extractors
+
+An extractor is a typed parameter of the form `(⟨name⟩ : Type)` declared after the route
+pattern. Extractors supply data to the handler — path segments, JSON bodies, query
+strings, headers, or custom values — and can be freely composed.
+
+The extractor system is built on two classes:
 
 ```lean
 class FromRequestParts (α : Type) where
   from_request_parts : Request Body.Stream → Except String α
 
-instance : FromRequestParts ApiKey where
-  from_request_parts req :=
-    match req.line.headers.find? (mk "x-api-key") with
-    | some (_, v) => .ok { key := v }
-    | none         => .error "missing api key"
-```
-
-Use in handler: `(⟨key⟩ : ApiKey)`.
-
-#### From request body (async)
-
-```lean
 class FromRequestBody (α : Type) where
   from_request_body : Request Body.Stream → ContextAsync (Except String α)
 ```
 
-| Extractor | Content-Type | Description |
-|---|---|---|
-| `Json T` | `application/json` | Auto-deserializes via `FromJson T` |
-| `PlainText` | `text/plain` | Raw string body |
-| `Form α` | `application/x-www-form-urlencoded` | Deserialized via `FromForm α` |
-| `MultiPartForm` | `multipart/form-data` | Streaming fields + file uploads |
+`FromRequestParts` runs synchronously from request metadata (path, headers, query,
+extensions). `FromRequestBody` runs asynchronously from the body stream. Extractors
+combine these two classes — at most one body extractor is allowed per handler, and
+it must be declared first.
 
-##### Form (URL-encoded)
-
-`Form α` parses `application/x-www-form-urlencoded` bodies into a typed struct via `FromForm α`.
-Use `deriving FromForm` on a structure to generate the instance automatically.
+### 3.1 Path parameters
 
 ```lean
-structure LoginForm where
-  username : String
-  password : String
-deriving FromForm
-
-def login := POST "/login" (⟨form⟩ : Form LoginForm) => do
-  return s!"logged in as {form.username}"
+structure Path (α : Type) where
+  value : α
 ```
 
-For raw access without a struct, use `HashMap String String`:
+Path parameters are deserialized with `FromString` (for scalar types) or `FromPath`
+(for structs). The route pattern captures segments into a `HashMap String String`
+stored in request extensions, and the extractor reads them back.
+
+#### 3.1.1 Scalar types
+
+Built-in `FromString` instances: `String`, `Nat`, `Int`, `Bool`.
 
 ```lean
-def rawForm := POST "/form" (⟨form⟩ : Form (HashMap String String)) => do
-  let user := form.get? "username" |>.getD ""
-  return s!"user = {user}"
+def getItem := GET "/items/{id}" (⟨id⟩ : Path Nat) => do
+    return itemsDb.find id
+
+def greet   := GET "/hello/{name}" (⟨name⟩ : Path String) =>
+    s!"Hello, {name}"
 ```
 
-##### MultiPartForm (file uploads)
+#### 3.1.2 Tuple types
 
-Streaming multipart parser — consumes the body lazily, never buffers file contents.
-Files are read directly from the `Body.Stream`, chunk by chunk.
+Multiple path params are extracted as tuples, up to 5 elements:
 
 ```lean
-def handleUpload := POST "/upload" (mp : MultiPartForm) => do
-  while let some entry := ← mp.nextEntry do
-    match entry with
-    | .field name value =>
-      IO.println s!"field {name} = {value}"
-    | .file file =>
-      -- save to disk (streams chunks directly, memory-safe)
-      file.save s!"uploads/{file.filename}"
-      -- or read all into memory (for small files)
-      let data := ← file.bytes
-      -- or stream via callback (e.g. upload to S3)
-      file.stream fun chunk => do
-        handle.write chunk
-      -- or skip
-      file.discard
-  return Status.ok
+def getComment := GET "/todos/{id}/comments/{cId}" (⟨id, cId⟩ : Path (Nat × Nat)) => do
+    return Comment.find id cId
+
+def complex  := GET "/{a}/{b}/{c}/{d}" (⟨a, b, c, d⟩ : Path (Nat × String × Nat × Bool)) => ...
 ```
 
-`FormFile` API:
+#### 3.1.3 Named struct parameters
 
-| Method | Returns | Description |
-|---|---|---|
-| `.save path` | `ContextAsync Unit` | Streams chunks to disk, then flushes |
-| `.bytes` | `ContextAsync ByteArray` | Reads all chunks into memory |
-| `.stream cb` | `ContextAsync Unit` | Calls `cb` for each chunk (no accumulation) |
-| `.discard` | `ContextAsync Unit` | Reads and discards all chunks |
-
-Under the hood, `MultiPartForm` uses [Knuth-Morris-Pratt](https://en.wikipedia.org/wiki/Knuth%E2%80%93Morris%E2%80%93Pratt_algorithm) for boundary detection,
-zero-alloc `ByteArray.Iterator` for prefix checks, and reads directly from `Body.Stream`
-without buffering the entire body. Peaks at ~1MB memory regardless of upload size.
-
-##### Custom FromRequestBody
-
-```lean
-structure Xml (α : Type) where
-  body : α
-
-instance [FromXml α] : FromRequestBody (Xml α) where
-  from_request_body req := do
-    let raw ← req.body.readAll
-    match Xml.parse raw with
-    | .ok v => return .ok { body := v }
-    | .error e => return .error e
-```
-
-Use in handler: `(⟨body⟩ : Xml T)`.
-
-#### From string values (param parsing)
-
-```lean
-class FromString (α : Type) where
-  parse : String → Except String α
-
-instance : FromString Uuid where
-  parse s := ...
-```
-
-Extends `Path α` parsing for new types: `Path Uuid` works
-because `Path α` uses `FromString α` internally.
-
-#### Deserializing path params into a struct (`FromPath`)
-
-Use `deriving FromPath` on a structure to parse named path parameters
-by field name instead of by position:
+Use `deriving FromPath` on a structure to match path parameters by field name
+instead of position:
 
 ```lean
 structure TodoIds where
@@ -280,32 +352,53 @@ def getComment := GET "/todos/{id}/comments/{cId}" (⟨ids⟩ : Path TodoIds) =>
     return Comment.find ids.id ids.cId
 ```
 
-#### Deserializing query params into a struct (`FromQuery`)
+The deriving handler generates a `FromPath` instance that looks up each struct field
+by name in the captured route params.
 
-Use `deriving FromQuery` on a structure to parse query parameters by field name.
-Fields with default values (`:=`) use that default when the key is missing.
-`Option T` fields default to `none`. Other fields produce an error if missing:
+### 3.2 Body extractors
+
+#### 3.2.1 `Json α`
+
+Deserializes the request body as JSON. Requires `FromJson α` and validates
+`Content-Type: application/json`.
 
 ```lean
-structure Pagination where
-  offset : Nat := 0
-  limit  : Nat := 10
-deriving FromQuery
-
-def listTodos := GET "/todos" (⟨page⟩ : Query Pagination) => do
-    let store ← ref.get
-    return store.todos.extract page.offset (page.offset + page.limit)
+structure Json (α : Type) where
+  body : α
 ```
 
--- `/todos` → offset=0, limit=10 (defaults)
--- `/todos?limit=5` → offset=0, limit=5
--- `/todos?offset=10&limit=20` → offset=10, limit=20
+```lean
+structure CreateRequest where
+  title : String
+deriving FromJson
 
-#### Deserializing form params into a struct (`FromForm`)
+def create := POST "/items" (⟨body⟩ : Json CreateRequest) => do
+    return (Status.created, Item.of body)
+```
 
-Use `deriving FromForm` on a structure to parse URL-encoded form fields by field name.
-Fields with default values (`:=`) use that default when the key is missing.
-`Option T` fields default to `none`. Other fields produce an error if missing:
+#### 3.2.2 `PlainText`
+
+Reads the entire body as a `String`. Validates `Content-Type: text/plain`.
+
+```lean
+structure PlainText where
+  body : String
+```
+
+```lean
+def echo := POST "/echo" (body : PlainText) => do
+    return body
+```
+
+#### 3.2.3 `Form α`
+
+Parses `application/x-www-form-urlencoded` bodies. Use `deriving FromForm` to
+deserialize into a struct:
+
+```lean
+structure Form (α : Type) where
+  value : α
+```
 
 ```lean
 structure LoginForm where
@@ -317,212 +410,662 @@ def login := POST "/login" (⟨form⟩ : Form LoginForm) => do
     return s!"logged in as {form.username}"
 ```
 
-### Valid parameter names
+For unstructured access, use `Form (HashMap String String)`.
 
-Param names must start with a letter or `_` and contain only
-alphanumeric characters or `_`. The pattern must start with `/`.
+#### 3.2.4 `MultiPartForm`
 
-```lean
--- ✓ valid
-GET "/user/{id}" ...
-GET "/files/{*path}" ...
-GET "/posts/{year}/{month}" ...
-
--- ✗ invalid — caught at compile time
-GET "user/{id}" ...        -- no leading /
-GET "/items/{*rest}/x" ... -- rest must be last
-GET "/user/{1bad}" ...     -- param name starts with digit
-```
-
-## Responses
-
-Return type | HTTP response
----|---
-`String` | `200` text/plain
-`Unit` / `()` | `200` empty body
-`T` (with `ToJson T`) | `200` application/json
-`Status × T` (with `ToJson T`) | given status + JSON body
-`Except E T` | `.ok` → `IntoResponse T`, `.error` → `IntoResponse E`
-`IO.Error` | `500` Internal Server Error
+Streaming multipart parser for `multipart/form-data`. Consumes the body lazily;
+file contents are never buffered.
 
 ```lean
-def created  := POST "/items" (⟨body⟩ : Json Item) => do
-    let item ← Item.create body
-    return (Status.created, item)    -- 201 Created + JSON
+structure MultiPartForm where
+  inner : IO.Ref MultipartInner
 
-def notFound := GET "/items/{id}" (⟨id⟩ : Path Nat) => do
-    match ← Item.find? id with
-    | some item => return Except.ok item
-    | none      => return Except.error (Status.notFound, ApiError.mk "not found")
+inductive MultipartEntry where
+  | field (name : String) (value : String)
+  | file  (file  : FormFile)
 
-def deleted  := DELETE "/items/{id}" (⟨id⟩ : Path Nat) => do
-    Item.delete id
-    return s!"Item {id} deleted"     -- 200 text/plain
-
-def oops     := GET "/boom" =>
-    throw <| IO.userError "bad"      -- 500 Internal Server Error
+structure FormFile where
+  name        : String
+  filename    : String
+  contentType : String
+  headers     : Std.Http.Headers
+  inner       : IO.Ref MultipartInner
 ```
 
-### Custom responses
+**Lifecycle.** Call `mp.nextEntry` in a loop until it returns `none`. Each entry is
+either a `.field` (in-memory string) or a `.file` (streamed from the body).
+`FormFile` provides four methods for consuming the file body:
 
-Implement `IntoResponse` for your type:
+| Method | Signature | Description |
+|---|---|---|
+| `.save` | `System.FilePath → ContextAsync Unit` | Streams chunks to disk |
+| `.bytes` | `ContextAsync ByteArray` | Reads all chunks into memory |
+| `.stream` | `(ByteArray → ContextAsync Unit) → ContextAsync Unit` | Calls a callback per chunk |
+| `.discard` | `ContextAsync Unit` | Reads and discards all chunks |
+
+```lean
+def upload := POST "/upload" (mp : MultiPartForm) => do
+  while let some entry := ← mp.nextEntry do
+    match entry with
+    | .field name value =>
+      IO.println s!"field {name} = {value}"
+    | .file file =>
+      file.save s!"uploads/{file.filename}"    -- stream to disk
+      -- file.stream fun chunk => ...           -- per-chunk callback
+      -- let data ← file.bytes                   -- read into memory
+      -- file.discard                            -- skip
+  return Status.ok
+```
+
+Under the hood, `MultiPartForm` uses a Knuth-Morris-Pratt automaton for
+boundary detection over a zero-copy `ChunkBuffer`, peaking at ~1 MB memory
+regardless of upload size.
+
+### 3.3 Query parameters
+
+```lean
+structure Query (α : Type) where
+  value : α
+```
+
+Parses the request URI query string into a struct via `FromQuery`. Fields with a
+default value (`:=`) use that default when the key is missing. `Option T` fields
+default to `none`. Other fields produce an error if absent.
+
+```lean
+structure Pagination where
+  offset : Nat := 0
+  limit  : Nat := 10
+deriving FromQuery
+
+def listItems := GET "/todos" (⟨page⟩ : Query Pagination) => do
+    let store ← db.get
+    return store.items
+      |>.extract page.offset (page.offset + page.limit)
+```
+
+### 3.4 Other built-in extractors
+
+These `FromRequestParts` instances extract raw request metadata without a wrapper type:
+
+| Extractor | Type | Description |
+|---|---|---|
+| `Method` | `Std.Http.Method` | HTTP method |
+| `Version` | `Std.Http.Version` | HTTP version |
+| `Headers` | `Std.Http.Headers` | All request headers |
+| `URI.Path` | `String` | Request path |
+| `URI.Query` | `String` | Raw query string |
+| `RequestTarget` | `String` | Full request URI |
+| `HeaderRange` | `HeaderRange` | Parsed `Range` header |
+
+`HeaderRange` is a zero-failure extractor — it returns `none` when the `Range` header
+is missing, unparseable, or empty.
+
+```lean
+structure HeaderRange where
+  ranges : Option (Array Range)
+
+structure Range where
+  start : Option Nat
+  stop  : Option Nat
+```
+
+```lean
+def serveVideo := GET "/media/{rest}" (⟨rest⟩ : Path String) (range : HeaderRange) => do
+    return { path := "media" / rest : RangeFile }
+```
+
+### 3.5 Custom extractors
+
+#### 3.5.1 From request parts
+
+Implement `FromRequestParts` to extract values synchronously from request metadata:
+
+```lean
+instance : FromRequestParts ApiKey where
+  from_request_parts req :=
+    match req.line.headers.find? (.mk "x-api-key") with
+    | some (_, v) => .ok { key := v }
+    | none        => .error "missing api key"
+
+def secure := GET "/secure" (⟨key⟩ : ApiKey) => ...
+```
+
+#### 3.5.2 From request body
+
+Implement `FromRequestBody` to read the body asynchronously:
+
+```lean
+instance [FromXml α] : FromRequestBody (Xml α) where
+  from_request_body req := do
+    let raw ← req.body.readAll
+    match parseXml raw with
+    | .ok v    => return .ok { body := v }
+    | .error e => return .error e
+
+def consume := POST "/xml" (⟨body⟩ : Xml T) => ...
+```
+
+#### 3.5.3 Sum types
+
+`α ⊕ β` chains two `FromRequestBody` instances. The first one whose `HasMimeTypes`
+match the request's `Content-Type` is selected.
+
+### 3.6 Handler signature rules
+
+The extractor system supports these handler shapes:
+
+| Shape | Example |
+|---|---|
+| `ContextAsync R` (no extractors) | `GET "/ping" => do ...` |
+| `R` (0 params, sync) | `GET "/ping" => "pong"` |
+| `BodyExtractor → Rest` (1 body + parts) | `POST "/todos" (⟨b⟩ : Json T) => ...` |
+| `PartsExtractor → Rest` (parts only) | `GET "/todos/{id}" (⟨id⟩ : Path Nat) => ...` |
+
+At most one body extractor is allowed, and it must appear before any parts extractors.
+
+---
+
+## 4. Responses
+
+Every handler must return a type implementing `IntoResponse`. Responses are streamed —
+the framework does not buffer the full body.
 
 ```lean
 class IntoResponse (α : Type) where
   into_response : ContextAsync α → ContextAsync (Response Body.Any)
+```
 
+A second class, `IntoResponseExt`, receives the request for use cases like ETag matching:
+
+```lean
+class IntoResponseExt (α : Type) where
+  into_response_ext : Request Body.Stream → ContextAsync α → ContextAsync (Response Body.Any)
+```
+
+### 4.1 Built-in response types
+
+| Return type | Status | Body |
+|---|---|---|
+| `String` | `200` | `text/plain` |
+| `Unit` / `()` | `200` | Empty |
+| `IO.Error` | `500` | Error message |
+| `Status` | Given status | Empty |
+| `T` (with `ToJson T`) | `200` | `application/json` |
+| `Status × String` | Given status | `text/plain` |
+| `Status × T` (with `ToJson T`) | Given status | `application/json` |
+| `Status × Headers × T` (with `ToJson T`) | Given status | Custom headers + JSON |
+| `Except ε α` | `.ok` → rhs, `.error` → lhs | Delegated |
+
+```lean
+def created  := POST "/items" ... => do
+    return (Status.created, item)                          -- 201 + JSON
+
+def deleted  := DELETE "/items/{id}" ... => do
+    return Except.ok s!"Item {id} deleted"                 -- 200 text/plain
+
+def notFound := GET "/items/{id}" ... => do
+    return Except.error (Status.notFound, { error := "not found" })  -- 404 + JSON
+
+def oops     := GET "/boom" =>
+    throw <| IO.userError "bad"                           -- 500
+```
+
+### 4.2 File
+
+Streams a file from disk with `Content-Length` framing. MIME type is detected from the
+file extension.
+
+```lean
+structure File where
+  path         : System.FilePath
+  cacheControl : Option CacheControl := some <| CacheControl.publicStatic 0
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `path` | *(required)* | Path to the file on disk |
+| `cacheControl` | `some <| publicStatic 0` | When `some cc`, sends `ETag`, `Cache-Control`, and supports `304 Not Modified`. When `none`, no caching headers are sent |
+
+`ETag` is a weak validator computed from the file's `mtime` and byte size.
+
+```lean
+def serveUI := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
+    return { path := "public" / rest : File }
+
+-- With custom cache policy:
+def serveIcons := GET "/icons/{*rest}" (⟨rest⟩ : Path String) => do
+    return { path := "icons" / rest
+             cacheControl := CacheControl.publicStaticHashed 31536000 : File }
+```
+
+### 4.3 RangeFile
+
+Like `File` but with HTTP `Range` header support. Sets `Accept-Ranges: bytes` and
+responds with `206 Partial Content` for range requests.
+
+```lean
+structure RangeFile where
+  path         : System.FilePath
+  cacheControl : Option CacheControl := some <| CacheControl.publicStatic 0
+```
+
+| Range format | Meaning |
+|---|---|
+| `bytes=0-499` | Bytes 0 to 499 inclusive |
+| `bytes=500-` | Bytes 500 to end of file |
+| `bytes=-500` | Last 500 bytes |
+
+Out-of-bounds ranges return `416 Range Not Satisfiable`.
+
+```bash
+$ curl -H "Range: bytes=0-1023" http://localhost:8080/media/video.mp4
+# → 206 Partial Content
+# → Content-Range: bytes 0-1023/9876543
+```
+
+### 4.4 BrowserCached
+
+Wraps any `ToJson α` value with `ETag` and `Cache-Control` headers for revalidation.
+The handler executes on every request, but on a cache hit (`If-None-Match` matches)
+the response body is omitted (`304 Not Modified`), saving bandwidth.
+
+```lean
+structure BrowserCached (α : Type) where
+  value        : α
+  cacheControl : CacheControl := CacheControl.userPrivate
+```
+
+The ETag is a weak validator computed from `String.hash` of the serialized JSON.
+
+```lean
+def getTodos := GET "/todos" (⟨page⟩ : Query Pagination) => do
+    let todos ← db.find page.offset page.limit
+    return { value := todos : BrowserCached (Array Todo) }
+
+-- Override cache control:
+def getTodosCached := GET "/todos/cached" (⟨page⟩ : Query Pagination) => do
+    let todos ← db.find page.offset page.limit
+    return { value := todos
+             cacheControl := CacheControl.publicStatic 60
+           : BrowserCached (Array Todo) }
+```
+
+### 4.5 Custom responses
+
+Implement `IntoResponse` to define your own response type:
+
+```lean
 instance : IntoResponse Html where
   into_response html := do
     let h ← html
     Response.ok
       |>.header (.mk "content-type") (.mk "text/html")
       |>.text (Html.render h)
+
+def page := GET "/" =>
+    Html.renderPage db.users
 ```
 
-Then handlers can return `Html` directly.
+Use `IntoResponseExt` when the response logic depends on the request (e.g., ETag
+matching, content negotiation). `File`, `RangeFile`, and `BrowserCached` are
+implemented via `IntoResponseExt`.
 
-### File serving with Range support
+---
 
-`RangeFile` streams a file from disk with `Content-Length` framing
-and supports the `Range` header for efficient seeking (video, audio, large files).
-Use the `HeaderRange` extractor to parse the request's `Range` header:
+## 5. Middleware
+
+Middleware is a function that wraps the handler pipeline, seeing both the request
+on the way in and the response on the way out:
 
 ```lean
-def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) (ranges : HeaderRange) => do
-  return { path := "static" / rest, ranges : RangeFile }
+abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
+
+-- Middleware type:
+HandlerSig → HandlerSig
 ```
 
-Supported range formats:
-* `bytes=0-499`  — closed range
-* `bytes=500-`   — open-ended (to end of file)
-* `bytes=-500`   — suffix range (last N bytes)
-
-MIME types are detected from the file extension (`.mp4`, `.html`, `.png`, ...).
-The `IntoResponse` instance sets `Accept-Ranges: bytes`, returns `206 Partial Content`
-with `Content-Range` for range requests, or `416 Range Not Satisfiable` for
-out-of-bounds ranges.
+Any function of this type qualifies. It receives the next handler in the chain,
+calls it, and can inspect or modify the response before returning:
 
 ```lean
--- curl -H "Range: bytes=0-1023" http://localhost:8080/static/video.mp4
--- → 206 Partial Content, Content-Range: bytes 0-1023/9876543
-```
-
-## Middleware
-
-Middleware has type `HandlerSig → HandlerSig`:
-
-```lean
-def myMiddleware (next : HandlerSig) : HandlerSig := fun req => do
-  IO.println s!"before: {req.line.uri.path}"
+def timingMiddleware (next : HandlerSig) : HandlerSig := fun req => do
+  let start ← IO.monoNanosNow
   let res ← next req
-  IO.println s!"after: {res.line.status}"
+  let elapsed ← (· - start) <$> IO.monoNanosNow
+  IO.eprintln s!"{req.line.method} {req.line.uri.path} → {res.line.status} in {elapsed}ns"
   return res
-
-def router : Router := Router.empty
-  |>.addRoute myRoute
-  |>.addMiddleware myMiddleware
 ```
 
-Middleware can be added at three levels — route, sub-router, and router — using
-Lean's pipe-builder idiom. The last middleware added wraps all earlier ones:
+Middleware can be attached at three levels:
+
+| Level | Method | Scope |
+|---|---|---|
+| Route | `route.addMiddleware mw` | That route only |
+| Sub-router | `subRouter.addMiddleware mw` | All routes in the sub-router |
+| Root router | `router.addMiddleware mw` | All routes |
+
+Middleware runs in **last-added-first** order: the last middleware added wraps all
+earlier ones. A typical stack:
 
 ```lean
-def todosRouter : Router := Router.empty
-  |>.addRoute   (listTodos.addMiddleware rateLimiter)            -- route-level
-  |>.addMiddleware auth                                          -- sub-router-level
-
-def rootRouter : Router := Router.empty
-  |>.addRouter     "/api/v1" todosRouter
-  |>.addMiddleware catchErrors                                   -- inner
-  |>.addMiddleware requestLogger                                 -- outermost, logs everything
+Router.empty
+  |>.addRoute myRoute
+  |>.addMiddleware auth             -- 3rd (inner)
+  |>.addMiddleware catchErrors      -- 2nd
+  |>.addMiddleware requestLogger    -- 1st (outermost)
 ```
+
+Middleware wraps the entire handler — it sees the request on the way in and the
+response on the way out.
 
 ```mermaid
 sequenceDiagram
-  actor Client
-  participant RL as requestLogger
-  participant CE as catchErrors
-  participant AU as auth
-  participant RT as rateLimiter
-  participant H as handler
-  Client->>RL: inbound
-  RL->>CE: next req
-  CE->>AU: next req
-  AU->>RT: next req
-  RT->>H: next req
-  H-->>RT: response
-  RT-->>AU: return
-  AU-->>CE: return
-  CE-->>RL: return (or error)
-  RL-->>Client: response
+  participant R as Router
+  participant M1 as requestLogger
+  participant M2 as catchErrors
+  participant M3 as auth
+  participant H as Handler
+  R-->>R: handler lookup
+  R->>M1: call middleware chain
+  activate M1
+  M1->>M2: next req
+  activate M2
+  M2->>M3: next req
+  activate M3
+  M3->>H: next req
+  activate H
+  H-->>M3: response
+  deactivate H
+  M3-->>M2: return
+  deactivate M3
+  M2-->>M1: return
+  deactivate M2
+  M1-->>R: return
+  deactivate M1
 ```
 
-Built-in middlewares:
+### 5.1 Built-in middleware
 
-| Middleware | Description |
-|---|---|
-| `requestLogger` | Logs method, path, and response time |
-| `catchErrors` | Catches exceptions, returns 500 (customizable) |
-| `auth` | Basic or bearer token authentication |
-| `withExtension` | Inject state into extension |
+#### `requestLogger`
 
-## Router composition
+Logs `METHOD`, path, status code, and response time to stdout. Reads the status
+from the response on the way out.
+```lean
+Router.empty
+  |>.addMiddleware requestLogger
+```
 
-Sub-routers are merged into the parent at construction time — each route's pattern
-gets the mount prefix prepended. All dispatch is a single lookup.
+#### `catchErrors`
+
+Wraps downstream middleware and the handler in a `try/catch`. On exception, returns
+`500 Internal Server Error` by default, or calls a custom error handler.
+
+```lean
+def catchErrors
+    (onError : IO.Error → ContextAsync (Response Body.Any) :=
+      fun _ => Response.internalServerError |>.empty)
+    (next : HandlerSig) : HandlerSig
+```
+
+```lean
+Router.empty
+  |>.addRoute myRoute
+  |>.addMiddleware (catchErrors fun e =>
+    Response.ok.text s!"custom error: {e}")
+```
+
+#### `auth`
+
+Basic or bearer token authentication. Returns `401 Unauthorized` with
+`WWW-Authenticate` header on failure.
+
+```lean
+inductive AuthConfig where
+  | basic  (validate : String → Redacted → Async Bool)
+  | bearer (validate : Redacted → Async Bool)
+```
+
+`Redacted` is a string wrapper that hides its value in logs and debug output
+(see §8.2).
+
+```lean
+def authConfig : AuthConfig := .basic fun username password =>
+    return username == "admin" && password.expose == "secret"
+
+Router.empty
+  |>.addRoute protectedRoute
+  |>.addMiddleware (auth authConfig)
+```
+
+
+#### `withExtension`
+
+Injects a value into the request's extension map. Extractors retrieve it later via
+`FromRequestParts`. This is the mechanism for sharing state across routes.
+
+```lean
+def withExtension (α : Type) [TypeName α] (data : α) (next : HandlerSig) : HandlerSig :=
+  fun req => next { req with extensions := req.extensions.insert data }
+```
+
+```lean
+structure AppState where
+  ref : IO.Ref Db
+deriving TypeName
+
+instance : FromRequestParts AppState where
+  from_request_parts req :=
+    match req.extensions.get AppState with
+    | some s => .ok s
+    | none   => .error "not installed"
+
+def stateMiddleware := do
+  let ref ← IO.mkRef defaultDb
+  return withExtension AppState { ref }
+
+-- Access in handler:
+def getData := GET "/data" (⟨s⟩ : AppState) => do
+    let db ← s.ref.get
+    return db.items
+```
+
+---
+
+## 6. Router
+
+The router holds a **segment trie** for O(depth) route dispatch and a list of
+router-level middlewares. Sub-routers are merged into the trie at construction time
+— there is no delegation at dispatch.
+
+```lean
+structure Router where
+  trie        : RouteTrie := RouteTrie.empty
+  middlewares : List (HandlerSig → HandlerSig) := []
+
+def Router.empty                                          : Router
+def Router.addRoute      (route : Route) (r : Router)     : Router
+def Router.addRouter     (r : Router) (pre : String) (sub : Router) : Router
+def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router
+```
+
+### 6.1 Route trie
+
+The `RouteTrie` is a segment-based dispatch tree. Each node has:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `handlers` | `HashMap Method HandlerSig` | Handlers at this node (leaf or prefix) |
+| `literals` | `HashMap.Raw String RouteTrie` | Exact segment matches (`/todos`) |
+| `param` | `Option (String × RouteTrie)` | Single-segment capture (`{id}`) |
+| `wildcard` | `Option (String × RouteTrie)` | Remainder capture (`{*rest}`), lowest priority |
+
+**Lookup.** Given a method and a list of path segments, `RouteTrie.lookup` walks the
+trie from the root. At each node, it tries literal match, then param match, then
+wildcard — taking the first match found. Returns the captured params (a `List (String × String)`)
+and the handler, or `none` if no route matches.
+
+### 6.2 Adding routes
+
+`addRoute` inserts a route into the trie. Route-level middlewares are **pre-composed**
+onto the handler at insertion time (using `foldl`, so the last route-level middleware
+added wraps outermost). The resulting handler is stored in the trie node.
+
+```lean
+Router.empty
+  |>.addRoute listTasks     -- 1st: first match wins for conflicts
+  |>.addRoute addTask
+```
+
+Route-level middleware is added to `Route` before insertion:
+
+```lean
+def rateLimited (next : HandlerSig) : HandlerSig := ...
+Router.empty
+  |>.addRoute (myRoute.addMiddleware rateLimited)
+```
+
+### 6.3 Sub-router mounting
+
+`addRouter` merges `sub` into `r` under `pre`. Internally:
+
+1. Parses `pre` into a list of `Segment` values.
+2. Walks `sub`'s trie via `RouteTrie.fold`.
+3. For each handler found: prepends `pre` segments to the route's segment list,
+   wraps the handler with `sub`'s middlewares, and inserts into `r`'s trie.
+
+The sub-router's middlewares only apply to routes originally from that sub-router.
+The merged trie is flat — dispatch is a single trie walk.
 
 ```lean
 def apiV1 : Router := Router.empty
   |>.addRoute listItems
   |>.addRoute createItem
-  |>.addMiddleware apiAuth
+  |>.addMiddleware apiAuth       -- applies to listItems and createItem
 
 def root : Router := Router.empty
-  |>.addRouter "/api/v1" apiV1    -- merged into root with prefix prepended
-  |>.addMiddleware requestLogger
+  |>.addRouter "/api/v1" apiV1   -- merged into root with prefix prepended
+  |>.addMiddleware requestLogger -- applies to ALL routes
 ```
 
-Routes can also be inlined:
+### 6.4 Dispatch
+
+On each incoming request:
+
+1. The path is split into segments via `splitPath`.
+2. `RouteTrie.lookup` walks the trie: literal > param > wildcard priority.
+3. On match, captured parameter names and values are injected into the request's
+   extension map as `RouteParams`. Extractors read them back via `FromRequestParts`.
+4. Router-level middlewares are composed around the handler using `foldl`
+   (last added runs outermost, wrapping route-level middlware and the handler).
+5. The composed handler is called with the enriched request.
+
+```mermaid
+sequenceDiagram
+  participant S as Server
+  participant R as Router
+  participant T as RouteTrie
+  participant M as Middlewares
+  participant H as Handler
+  S->>R: onRequest
+  R->>T: lookup(method, pathSegs)
+  T-->>R: (capturedParams, handler)
+  R-->>R: inject RouteParams
+  R-->>R: compose(router.middlewares, handler)
+  R->>M: call composed chain
+  M->>H: next req
+  H-->>M: response
+  M-->>R: return
+  R-->>S: response
+```
+
+If no route matches, the router returns `404 Not Found`.
+
+### 6.5 Server integration
+
+`Router` implements `Std.Http.Server.Handler`:
 
 ```lean
-def apiV1 : Router := Router.empty
-  |>.addRoute (GET "/hello" => "hi")
-  |>.addRoute (POST "/echo" (⟨body⟩ : Json Pet) => return body)
+def main : IO Unit := Async.block do
+  let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
+  let server ← Server.serve addr router
+  server.waitShutdown
 ```
 
-## Requirements
+---
 
-- Lean `4.31.0`
+## 7. Reference
+
+### 7.1 Misc
+
+#### Extended header names
+
+Additional `Std.Http.Header.Name` constants beyond Std's built-in set:
+
+| Constant | Value |
+|---|---|
+| `contentDisposition` | `content-disposition` |
+| `acceptRanges` | `accept-ranges` |
+| `contentRange` | `content-range` |
+| `range` | `range` |
+| `wwwAuthenticate` | `www-authenticate` |
+| `cacheControl` | `cache-control` |
+| `etag` | `etag` |
+| `ifNoneMatch` | `if-none-match` |
+| `lastModified` | `last-modified` |
+| `ifModifiedSince` | `if-modified-since` |
+
+#### MIME type constants
+
+| Constant | Value |
+|---|---|
+| `MimeType.octetStream` | `application/octet-stream` |
+| `MimeType.textPlain` | `text/plain` |
+| `MimeType.textHtml` | `text/html` |
+| `MimeType.textCss` | `text/css` |
+| `MimeType.textJavascript` | `text/javascript` |
+| `MimeType.imagePng` | `image/png` |
+| `MimeType.imageJpeg` | `image/jpeg` |
+| `MimeType.imageSvg` | `image/svg+xml` |
+| `MimeType.imageWebp` | `image/webp` |
+| `MimeType.videoMp4` | `video/mp4` |
+| `MimeType.videoWebm` | `video/webm` |
+| `MimeType.audioMpeg` | `audio/mpeg` |
+| `MimeType.applicationJson` | `application/json` |
+| `MimeType.applicationPdf` | `application/pdf` |
+| `MimeType.applicationZip` | `application/zip` |
+| `MimeType.formUrlEncoded` | `application/x-www-form-urlencoded` |
+| `MimeType.multipartForm` | `multipart/form-data` |
+
+### 7.2 Examples
+
+| File | Description |
+|---|---|
+| [`Examples/Todos.lean`](./Examples/Todos.lean) | Full REST API: todos + comments, pagination, auth, sub-routers, catch-all |
+| [`Examples/Upload.lean`](./Examples/Upload.lean) | File uploads: `MultiPartForm` streaming, `Form` URL-encoded body |
+| [`Examples/LeanPlay/Main.lean`](./Examples/LeanPlay/Main.lean) | Video browser: static file serving with `File`/`RangeFile`, custom middleware |
+
+Run an example:
+
+```bash
+lake exe -- lean --run Examples/Todos.lean
+```
+
+### 7.3 Requirements & installation
+
+- Lean **4.31.0** (pinned in `lean-toolchain`)
 - Lake
 
-Toolchain is pinned in `lean-toolchain`.
-
-## Installation
-
-This repository is currently install-from-source.
-
-1. Clone the repository.
-2. Build the project:
-
 ```bash
+git clone https://github.com/leanprover-community/LeanIO
+cd LeanIO
 lake build
-```
-
-3. Build and run the test target:
-
-```bash
 lake test
 ```
 
-## Supported HTTP methods
-
-Full list: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `CONNECT`,
-`TRACE`, `ACL`, `BIND`, `CHECKIN`, `CHECKOUT`, `COPY`, `LABEL`, `LINK`, `LOCK`,
-`MERGE`, `MKACTIVITY`, `MKCALENDAR`, `MKCOL`, `MKREDIRECTREF`, `MKWORKSPACE`,
-`MOVE`, `ORDERPATCH`, `PRI`, `PROPFIND`, `PROPPATCH`, `QUERY`, `REBIND`, `REPORT`,
-`SEARCH`, `UNBIND`, `UNCHECKOUT`, `UNLINK`, `UNLOCK`, `UPDATE`,
-`BASELINECONTROL`, `UPDATEREDIRECTREF`, `VERSIONCONTROL`
+---
 
 ## License
 
-MIT License. See [`LICENSE`](./LICENSE).
+MIT. See [`LICENSE`](./LICENSE).
