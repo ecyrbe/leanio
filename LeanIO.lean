@@ -4,6 +4,7 @@ import LeanIO.Utils
 import LeanIO.Response.IntoResponse
 import LeanIO.Response.File.File
 import LeanIO.Response.File.RangeFile
+import LeanIO.Response.BrowserCached
 import LeanIO.Request.FromRequestBody
 import LeanIO.Request.FromRequestParts
 import LeanIO.Request.HeaderRange

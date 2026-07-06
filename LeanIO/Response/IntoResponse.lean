@@ -44,6 +44,11 @@ public instance [IntoResponse ε] [IntoResponse α] : IntoResponse (Except ε α
     | .ok ok => IntoResponse.into_response <| pure ok
     | .error e => IntoResponse.into_response <| pure e
 
+public instance [IntoResponse ε] [IntoResponseExt α] : IntoResponseExt (Except ε α) where
+  into_response_ext req res := do match ← res with
+    | .ok ok => IntoResponseExt.into_response_ext req <| pure ok
+    | .error e => IntoResponse.into_response <| pure e
+
 public instance : IntoResponse (Status × String)  where
   into_response sstr := do
     let (s, str) ← sstr
