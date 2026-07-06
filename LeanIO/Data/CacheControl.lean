@@ -49,6 +49,12 @@ public instance : ToString CacheControl where
 public instance : Coe CacheControl Header.Value where
   coe cc := Header.Value.ofString! (toString cc)
 
+/-!
+  Cache Control PRESETS
+-/
 public def publicStatic (maxAge: Nat): CacheControl := ⟨[.public, .maxAge maxAge, .mustRevalidate]⟩
+public def publicStaticHashed (maxAge: Nat): CacheControl := ⟨[.public, .maxAge maxAge, .immutable]⟩
+public def disabled : CacheControl := ⟨[.noCache, .noStore, .mustRevalidate]⟩
+public def userPrivate : CacheControl := ⟨[.private,.noCache]⟩
 
 end LeanIO.CacheControl
