@@ -196,8 +196,7 @@ from the underlying `Body.Stream`.
 | Return strings, JSON, status codes, files, cached responses | [4. Responses](#4-responses) |
 | Add logging, error handling, auth, shared state | [5. Middleware](#5-middleware) |
 | Compose sub-routers under path prefixes | [6. Router](#6-router) |
-| Control browser and CDN caching behavior | [7. Cache control](#7-cache-control) |
-| All HTTP methods, utility types, examples | [8. Reference](#8-reference) |
+| All HTTP methods, utility types, examples | [7. Reference](#7-reference) |
 
 ---
 
@@ -213,7 +212,7 @@ syntax, validates parameters at compile time, and wraps the handler with extract
 METHOD "pattern" extractor ... extractor => handler-body
 ```
 
-- `METHOD` — one of 41 HTTP method identifiers (see [8.1](#81-http-methods)).
+- `METHOD` — HTTP verb: `GET`, `POST`, `PUT`, etc.
 - `"pattern"` — a string literal starting with `/`, possibly containing path parameters.
 - `extractor` — one or more `(⟨name⟩ : Type)` binders (see chapter 3).
 - `handler-body` — a `ContextAsync R` or `R` expression where `R` implements `IntoResponse`.
