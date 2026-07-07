@@ -15,7 +15,7 @@ def index := GET "/" => do
              cacheControl := CacheControl.disabled : File }
 
 def serveStatic := GET "/{*rest}" (⟨rest⟩ : Path String) => do
-    return { path := staticDir / rest : RangeFile }
+    return { path := staticDir / rest : File }
 
 def main : IO Unit := Async.block do
   let router : Router := Router.empty
