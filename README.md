@@ -1058,8 +1058,8 @@ lake exec todos
 - Lake
 
 ```bash
-git clone https://github.com/leanprover-community/LeanIO
-cd LeanIO
+git clone https://github.com/ecyrbe/leanio
+cd leanio
 lake build
 lake test
 ```
