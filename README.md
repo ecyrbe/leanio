@@ -1048,7 +1048,8 @@ Additional `Std.Http.Header.Name` constants beyond Std's built-in set:
 Run an example:
 
 ```bash
-lake exe -- lean --run Examples/Todos.lean
+lake build todos // or upload or leanplay
+lake exec todos
 ```
 
 ### 7.3 Requirements & installation
