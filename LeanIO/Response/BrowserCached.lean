@@ -1,6 +1,6 @@
 module
 
-import LeanIO.Data.CacheControl
+import LeanIO.Data.Headers.CacheControl
 import LeanIO.Response.Common
 import LeanIO.Response.IntoResponse
 import Std.Http

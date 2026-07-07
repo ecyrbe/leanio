@@ -1,7 +1,7 @@
 import Std.Async.ContextAsync
 import LeanIO.Router.Route
 import LeanIO.Request.FromRequestParts
-import LeanIO.Data.HeaderName
+import LeanIO.Data.Headers.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Async

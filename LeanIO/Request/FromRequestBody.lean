@@ -1,6 +1,6 @@
 import Lean
 import Std.Async.ContextAsync
-import LeanIO.Data.MimeType
+import LeanIO.Data.Headers.MimeType
 
 namespace LeanIO
 open Std.Http Std.Async Lean MimeType

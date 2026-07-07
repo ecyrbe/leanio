@@ -3,9 +3,9 @@ import LeanIO.Response.Common
 import LeanIO.Response.IntoResponse
 import LeanIO.Response.File.Utils
 import LeanIO.Request.HeaderRange
-import LeanIO.Data.MimeType
-import LeanIO.Data.HeaderName
-import LeanIO.Data.CacheControl
+import LeanIO.Data.Headers.MimeType
+import LeanIO.Data.Headers.HeaderName
+import LeanIO.Data.Headers.CacheControl
 
 namespace LeanIO
 open Std.Http Std.Async

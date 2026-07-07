@@ -2,10 +2,10 @@ import Std.Async.ContextAsync
 import LeanIO.Response.Common
 import LeanIO.Response.IntoResponse
 import LeanIO.Request.HeaderRange
-import LeanIO.Data.HeaderName
-import LeanIO.Data.MimeType
+import LeanIO.Data.Headers.HeaderName
+import LeanIO.Data.Headers.MimeType
 import LeanIO.Response.File.Utils
-import LeanIO.Data.CacheControl
+import LeanIO.Data.Headers.CacheControl
 
 
 namespace LeanIO

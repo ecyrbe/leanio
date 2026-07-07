@@ -1,5 +1,5 @@
 import Std.Async.ContextAsync
-import LeanIO.Data.MimeType
+import LeanIO.Data.Headers.MimeType
 import LeanIO.Request.MultiPartForm.Defs
 import LeanIO.Request.MultiPartForm.Headers
 import LeanIO.Request.MultiPartForm.Stream

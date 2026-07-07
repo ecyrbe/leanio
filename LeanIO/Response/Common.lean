@@ -1,7 +1,7 @@
 module
 
 public import Std.Http.Data.Body.Stream
-public import LeanIO.Data.HeaderName
+public import LeanIO.Data.Headers.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Async

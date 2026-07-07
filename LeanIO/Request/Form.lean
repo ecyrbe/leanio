@@ -1,7 +1,7 @@
 import Lean
 import Std.Async.ContextAsync
 import LeanIO.Request.FromRequestBody
-import LeanIO.Data.MimeType
+import LeanIO.Data.Headers.MimeType
 
 namespace LeanIO
 open Std.Http Std.Async MimeType

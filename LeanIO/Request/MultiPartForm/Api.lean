@@ -1,7 +1,7 @@
 import Std.Async.ContextAsync
 import Std.Data.ByteSlice
 import LeanIO.Request.FromRequestBody
-import LeanIO.Data.MimeType
+import LeanIO.Data.Headers.MimeType
 import LeanIO.Request.MultiPartForm.Defs
 import LeanIO.Request.MultiPartForm.Stream
 import LeanIO.Request.MultiPartForm.Parse

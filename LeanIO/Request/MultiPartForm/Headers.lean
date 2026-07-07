@@ -2,7 +2,7 @@ import Lean
 import LeanIO.Utils
 import LeanIO.Data.ChunkBuffer
 import LeanIO.Data.String
-import LeanIO.Data.HeaderName
+import LeanIO.Data.Headers.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Slice

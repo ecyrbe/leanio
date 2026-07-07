@@ -156,6 +156,7 @@ def deleteTodo := DELETE "/todos/{id}" (⟨ref⟩ : TodoStoreRef) (⟨id⟩ : Pa
 
 def throwTest := GET "/error" => do
     throw <| IO.userError "middleware test exception"
+    return ()
 
 -- ==========================================
 -- Comment Routes

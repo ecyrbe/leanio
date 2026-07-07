@@ -1,7 +1,7 @@
 import LeanIO.Router
 import LeanIO.Utils
 import LeanIO.Data.Redacted
-import LeanIO.Data.HeaderName
+import LeanIO.Data.Headers.HeaderName
 
 namespace Std.Http.Header.Value
 
