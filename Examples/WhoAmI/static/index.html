@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhoAmI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #111; color: #eee;
+      min-height: 100vh; display: flex;
+      align-items: center; justify-content: center;
+    }
+    .card {
+      background: #1a1a1a; border: 1px solid #333;
+      border-radius: 12px; padding: 40px 48px;
+      text-align: center; max-width: 420px; width: 90%;
+    }
+    .card h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+    .card p  { color: #888; font-size: 14px; margin-bottom: 24px; }
+    .ip {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 32px; font-weight: 700; color: #fff;
+      background: #222; border-radius: 8px;
+      padding: 16px 24px; margin-bottom: 8px;
+      word-break: break-all;
+    }
+    .label { color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>WhoAmI</h1>
+    <p>Your public IP address as seen by the server</p>
+    <div class="ip" id="ip">...</div>
+    <div class="label">— LeanIO —</div>
+  </div>
+  <script>
+    fetch('/api/whoami')
+      .then(r => r.text())
+      .then(ip => { document.getElementById('ip').textContent = ip; })
+      .catch(() => { document.getElementById('ip').textContent = 'unreachable'; });
+  </script>
+</body>
+</html>

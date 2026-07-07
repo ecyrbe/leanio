@@ -1,3 +1,5 @@
+module
+
 import Lean
 
 namespace LeanIO.Router
@@ -9,28 +11,28 @@ A single segment of a route pattern:
 - `rest name`       — catch-all (`{*name}`), captures the remainder of the path;
                        must be the last segment in a pattern
 -/
-inductive Segment where
+public inductive Segment where
   | lit (s : String)
   | param (name : String)
   | rest (name : String)
 deriving Repr, BEq, DecidableEq
 
-instance : ToString Segment where
+public instance : ToString Segment where
   toString
     | Segment.lit s   => s!"lit \"{s}\""
     | Segment.param n => s!"param \"{n}\""
     | Segment.rest n  => s!"rest \"{n}\""
 
 /-- A route pattern composed of `Segment` values, with precomputed length. -/
-structure RoutePattern where
+public structure RoutePattern where
   segments : List Segment
   length   : Nat
   hasRest  : Bool := false
 
-def splitPath (path : String) : List String :=
+public def splitPath (path : String) : List String :=
   path.split '/' |>.filter (¬ ·.isEmpty) |>.map toString |>.toList
 
-def RoutePattern.ofString (path : String) : RoutePattern :=
+public def RoutePattern.ofString (path : String) : RoutePattern :=
   let segs := splitPath path |>.map fun s =>
     if s.startsWith "{*" && s.endsWith "}" then
       Segment.rest (s.drop 2 |>.dropEnd 1 |>.toString)

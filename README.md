@@ -499,23 +499,7 @@ These `FromRequestParts` instances extract raw request metadata without a wrappe
 | `URI.Query` | `String` | Raw query string |
 | `RequestTarget` | `String` | Full request URI |
 | `HeaderRange` | `HeaderRange` | Parsed `Range` header |
-
-`HeaderRange` is a zero-failure extractor — it returns `none` when the `Range` header
-is missing, unparseable, or empty.
-
-```lean
-structure HeaderRange where
-  ranges : Option (Array Range)
-
-structure Range where
-  start : Option Nat
-  stop  : Option Nat
-```
-
-```lean
-def serveVideo := GET "/media/{rest}" (⟨rest⟩ : Path String) (range : HeaderRange) => do
-    return { path := "media" / rest : RangeFile }
-```
+| `RemoteAddr` | `Std.Http.Server.RemoteAddr` | Remote client IP |
 
 ### 3.5 Custom extractors
 
@@ -1044,6 +1028,7 @@ Additional `Std.Http.Header.Name` constants beyond Std's built-in set:
 | [`Examples/Todos.lean`](./Examples/Todos.lean) | Full REST API: todos + comments, pagination, auth, sub-routers, catch-all |
 | [`Examples/Upload.lean`](./Examples/Upload.lean) | File uploads: `MultiPartForm` streaming, `Form` URL-encoded body |
 | [`Examples/LeanPlay/Main.lean`](./Examples/LeanPlay/Main.lean) | Video browser: static file serving with `File`/`RangeFile`, custom middleware |
+| [`Examples/WhoAmI/WhoAmI.lean`](./Examples/WhoAmI/WhoAmI.lean) | Client IP: `RemoteAddr` extractor with a single-page frontend |
 
 Run an example:
 

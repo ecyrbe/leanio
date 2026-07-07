@@ -21,6 +21,11 @@ name = "upload"
 root = "Upload"
 srcDir = "Examples"
 
+[[lean_exe]]
+name = "whoami"
+root = "WhoAmI"
+srcDir = "Examples/WhoAmI"
+
 [[lean_lib]]
 name = "Tests"
 globs = ["Tests.+"]
