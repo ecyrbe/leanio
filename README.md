@@ -683,14 +683,12 @@ The ETag is a weak validator computed from `String.hash` of the serialized JSON.
 ```lean
 def getTodos := GET "/todos" (⟨page⟩ : Query Pagination) => do
     let todos ← db.find page.offset page.limit
-    return { value := todos : BrowserCached (Array Todo) }
+    return BrowserCached.new todos
 
 -- Override cache control:
 def getTodosCached := GET "/todos/cached" (⟨page⟩ : Query Pagination) => do
     let todos ← db.find page.offset page.limit
-    return { value := todos
-             cacheControl := CacheControl.publicStatic 60
-           : BrowserCached (Array Todo) }
+    return BrowserCached.new todos  (CacheControl.publicStatic 60)
 ```
 
 ### 4.5 Custom responses
