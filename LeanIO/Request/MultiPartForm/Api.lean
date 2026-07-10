@@ -92,10 +92,10 @@ for boundary detection.
 instance : FromRequestBody MultiPartForm where
   from_request_body req := do
     match checkMimeTypes MultiPartForm req.line.headers with
-    | .error e => return .error e
+    | .error e => return .error (.bad_media_error e)
     | .ok _ => pure ()
-    let some contentType := req.line.headers.get? .contentType | return .error "missing Content-Type header"
-    let some boundary := extractParam (toString contentType) "boundary" | return .error "failed to extract boundary from content-type"
+    let some contentType := req.line.headers.get? .contentType | return .error (.bad_media_error "missing Content-Type header")
+    let some boundary := extractParam (toString contentType) "boundary" | return .error (.syntax_error "failed to extract boundary from content-type")
     let boundSep := ("\r\n--" ++ boundary).toUTF8
     let inner : MultipartInner := {
         boundStart := boundSep.extract 2 boundSep.size

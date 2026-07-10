@@ -69,7 +69,7 @@ instance [FromRequestBody P] [PartsExtractor Rest] : Extractor (P → Rest) wher
   extract handler req := do
     match ← FromRequestBody.from_request_body (α:=P) req with
     | .ok p => PartsExtractor.extractParts (handler p) req
-    | .error e => Response.badRequest |>.text e
+    | .error e => Response.new |>.status e.toStatus |>.text (toString e)
 
 instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) where
   extract handler req := do

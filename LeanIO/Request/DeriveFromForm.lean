@@ -23,36 +23,41 @@ private def mkFromFormBody (indVal : InductiveVal) : TermElabM Term := do
       let fnameLit   := Syntax.mkStrLit (toString fieldName)
       let fident     := fieldIdents[i]!
       let x          := xs[numParams + i]!
+      let rawIdent   := mkIdent (Name.mkSimple s!"raw_{i}")
 
       let fieldType ← whnf (← inferType x)
       let isOpt := fieldType.isAppOfArity ``Option 1
       let defaultFn? := getDefaultFnForField? (← getEnv) indVal.name fieldName
 
+      stmts := stmts.push (← `(doElem|
+        let $rawIdent:ident : Option String := qs.get $fnameLit:str
+      ))
+
       if isOpt then
         stmts := stmts.push (← `(doElem|
-          let $fident:ident ← match map.get? $fnameLit:str with
-            | some s => Except.map Option.some <| LeanIO.FromString.parse s
+          let $fident:ident ← match $rawIdent:ident with
+            | some s => Except.map Option.some <| FromString.parse s
             | none => .ok none
         ))
       else if let some defaultFn := defaultFn? then
         let defaultInfo ← getConstInfoDefn defaultFn
         let defaultTerm ← PrettyPrinter.delab defaultInfo.value
         stmts := stmts.push (← `(doElem|
-          let $fident:ident ← match map.get? $fnameLit:str with
-            | some s => LeanIO.FromString.parse s
+          let $fident:ident ← match $rawIdent:ident with
+            | some s => FromString.parse s
             | none => .ok $defaultTerm:term
         ))
       else
-        let errLit := Syntax.mkStrLit ("missing form field '" ++ toString fieldName ++ "'")
+        let errLit := Syntax.mkStrLit ("missing form parameter '" ++ toString fieldName ++ "'")
         stmts := stmts.push (← `(doElem|
-          let $fident:ident ← match map.get? $fnameLit:str with
-            | some s => LeanIO.FromString.parse s
+          let $fident:ident ← match $rawIdent:ident with
+            | some s => FromString.parse s
             | none => .error $errLit:str
         ))
 
     let fieldTermIdents : Array Term := fieldIdents.map fun i => i
     let result ← `(.ok { $[$fieldIdents:ident := $fieldTermIdents:term],* })
-    `(fun map => do
+    `(fun qs => do
       $[$stmts:doElem]*
       $result:term)
 
@@ -70,8 +75,9 @@ private def mkFromFormInstanceCmd (declName : Name) : TermElabM Command := do
 /--
 Derives a `FromForm` instance for a structure so that URL-encoded form fields
 are deserialized by matching field names against form keys.
-`Option T` fields default to `none`. Other fields produce an error if the key
-is missing.
+Fields with default values (e.g. `Nat := 0`) use the default when the key
+is missing. `Option T` fields default to `none`. Other fields produce an
+error if the key is missing.
 
 ```lean
 structure LoginForm where
