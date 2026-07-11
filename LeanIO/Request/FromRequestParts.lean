@@ -6,8 +6,29 @@ public import LeanIO.Router.Route
 namespace LeanIO
 open Std.Http Std.Async
 
+public inductive FromRequestPartsError where
+| syntax_error (msg: String) -- 400 bad request
+| semantic_error (msg: String) -- 422 unprocessable entity
+| io_error (e: IO.Error) -- 500 internal server error
+
+public def FromRequestPartsError.toStatus : FromRequestPartsError → Status
+  | .syntax_error _ => Status.badRequest
+  | .semantic_error _ => Status.unprocessableEntity
+  | .io_error _ => Status.internalServerError
+
+public instance : ToString FromRequestPartsError where
+  toString
+  | .syntax_error msg => msg
+  | .semantic_error msg => msg
+  | .io_error e => e.toString
+
+public instance : MonadLift (Except String) (Except FromRequestPartsError) where
+  monadLift
+    | .ok x => .ok x
+    | .error e => .error (.semantic_error e)
+
 public class FromRequestParts (α : Type) where
-  from_request_parts : Request Body.Stream → Except String α
+  from_request_parts : Request Body.Stream → Except FromRequestPartsError α
 
 /-!
  BASIC raw extractors
@@ -64,7 +85,7 @@ public structure Path (α : Type) where
 
 public instance [FromPath α] : FromRequestParts (Path α) where
   from_request_parts req := do
-    let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
+    let some ext := (req.extensions.get Router.RouteParams) | .error <|.io_error "Extension for RouteParams not found"
     let params := Std.HashMap.ofList ext.params
     let value ← FromPath.fromPath params
     return {value}
@@ -72,26 +93,26 @@ public instance [FromPath α] : FromRequestParts (Path α) where
 -- when only one parameter
 public instance [FromString α] : FromRequestParts (Path α) where
   from_request_parts req := do
-    let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
+    let some ext := (req.extensions.get Router.RouteParams) | .error <|.io_error "Extension for RouteParams not found"
     if ext.params.length != 1 then
-      .error "expected exactly one path parameter"
+      .error (.semantic_error "expected exactly one path parameter")
     let value ← FromString.parse ext.params[0]!.2
     return {value}
 
 public instance [FromString α] [FromString β] : FromRequestParts (Path (α × β)) where
   from_request_parts req := do
-    let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
+    let some ext := (req.extensions.get Router.RouteParams) | .error <|.io_error "Extension for RouteParams not found"
     if ext.params.length != 2 then
-      .error "expected exactly two path parameters"
+      .error <|.semantic_error "expected exactly two path parameters"
     let a: α ← FromString.parse ext.params[0]!.2
     let b: β ← FromString.parse ext.params[1]!.2
     return {value := (a, b)}
 
 public instance [FromString α] [FromString β] [FromString γ] : FromRequestParts (Path (α × β × γ)) where
   from_request_parts req := do
-    let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
+    let some ext := (req.extensions.get Router.RouteParams) | .error <|.io_error "Extension for RouteParams not found"
     if ext.params.length != 3 then
-      .error "expected exactly three path parameters"
+      .error <|.semantic_error "expected exactly three path parameters"
     let a: α ← FromString.parse ext.params[0]!.2
     let b: β ← FromString.parse ext.params[1]!.2
     let c: γ ← FromString.parse ext.params[2]!.2
@@ -99,9 +120,9 @@ public instance [FromString α] [FromString β] [FromString γ] : FromRequestPar
 
 public instance [FromString α] [FromString β] [FromString γ] [FromString δ] : FromRequestParts (Path (α × β × γ × δ )) where
   from_request_parts req := do
-    let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
+    let some ext := (req.extensions.get Router.RouteParams) | .error <|.io_error "Extension for RouteParams not found"
     if ext.params.length != 4 then
-      .error "expected exactly four path parameters"
+      .error <|.semantic_error "expected exactly four path parameters"
     let a: α ← FromString.parse ext.params[0]!.2
     let b: β ← FromString.parse ext.params[1]!.2
     let c: γ ← FromString.parse ext.params[2]!.2
@@ -110,9 +131,9 @@ public instance [FromString α] [FromString β] [FromString γ] [FromString δ] 
 
 public instance [FromString α] [FromString β] [FromString γ] [FromString δ] [FromString ε] : FromRequestParts (Path (α × β × γ × δ × ε)) where
   from_request_parts req := do
-    let some ext := (req.extensions.get Router.RouteParams) | .error "Extension for RouteParams not found"
+    let some ext := (req.extensions.get Router.RouteParams) | .error <|.io_error "Extension for RouteParams not found"
     if ext.params.length != 5 then
-      .error "expected exactly five path parameters"
+      .error <|.semantic_error "expected exactly five path parameters"
     let a: α ← FromString.parse ext.params[0]!.2
     let b: β ← FromString.parse ext.params[1]!.2
     let c: γ ← FromString.parse ext.params[2]!.2

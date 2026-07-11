@@ -75,7 +75,7 @@ instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) whe
   extract handler req := do
     match FromRequestParts.from_request_parts (α:=P) req with
     | .ok p => PartsExtractor.extractParts (handler p) req
-    | .error e => Response.badRequest |>.text e
+    | .error e => Response.new |>.status e.toStatus |>.text (toString e)
 
 -- PartsAdapter: body already consumed. Only FromRequestParts allowed.
 
@@ -89,6 +89,6 @@ private instance [FromRequestParts P] [PartsExtractor Rest] : PartsExtractor (P 
   extractParts handler req := do
     match FromRequestParts.from_request_parts (α:=P) req with
     | .ok p => PartsExtractor.extractParts (handler p) req
-    | .error e => Response.badRequest |>.text e
+    | .error e => Response.new |>.status e.toStatus |>.text (toString e)
 
 end LeanIO
