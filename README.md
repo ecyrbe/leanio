@@ -223,8 +223,8 @@ The macro expands to a `Route` value:
 structure Route where
   method      : Method
   pat         : RoutePattern
-  handler     : HandlerSig
-  middlewares : List (HandlerSig → HandlerSig) := []
+  handler     : HandlerFn
+  middlewares : List Middleware := []
 ```
 
 #### Pattern syntax
@@ -703,17 +703,17 @@ Middleware is a function that wraps the handler pipeline, seeing both the reques
 on the way in and the response on the way out:
 
 ```lean
-abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
+abbrev HandlerFn := Request Body.Stream → ContextAsync (Response Body.Any)
 
 -- Middleware type:
-HandlerSig → HandlerSig
+abbrev Middleware := HandlerFn → HandlerFn
 ```
 
 Any function of this type qualifies. It receives the next handler in the chain,
 calls it, and can inspect or modify the response before returning:
 
 ```lean
-def timingMiddleware (next : HandlerSig) : HandlerSig := fun req => do
+def timingMiddleware : Middleware := fun next req => do
   let start ← IO.monoNanosNow
   let res ← next req
   let elapsed ← (· - start) <$> IO.monoNanosNow
@@ -789,7 +789,7 @@ Wraps downstream middleware and the handler in a `try/catch`. On exception, retu
 def catchErrors
     (onError : IO.Error → ContextAsync (Response Body.Any) :=
       fun _ => Response.internalServerError |>.empty)
-    (next : HandlerSig) : HandlerSig
+    (next : HandlerFn) : HandlerFn
 ```
 
 ```lean
@@ -829,8 +829,8 @@ Injects a value into the request's extension map. Extractors retrieve it later v
 `FromRequestParts`. This is the mechanism for sharing state across routes.
 
 ```lean
-def withExtension (α : Type) [TypeName α] (data : α) (next : HandlerSig) : HandlerSig :=
-  fun req => next { req with extensions := req.extensions.insert data }
+def withExtension (α : Type) [TypeName α] (data : α) : Middleware :=
+  fun next req => next { req with extensions := req.extensions.insert data }
 ```
 
 ```lean
@@ -865,12 +865,12 @@ router-level middlewares. Sub-routers are merged into the trie at construction t
 ```lean
 structure Router where
   trie        : RouteTrie := RouteTrie.empty
-  middlewares : List (HandlerSig → HandlerSig) := []
+  middlewares : List Middleware := []
 
 def Router.empty                                          : Router
-def Router.addRoute      (route : Route) (r : Router)     : Router
-def Router.addRouter     (r : Router) (pre : String) (sub : Router) : Router
-def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router
+def Router.addRoute      (route : Route) (self : Router)     : Router
+def Router.addRouter     (self : Router) (pre : String) (sub : Router) : Router
+def Router.addMiddleware (middleware : Middleware) (r : Router) : Router
 ```
 
 ### 6.1 Route trie
@@ -879,7 +879,7 @@ The `RouteTrie` is a segment-based dispatch tree. Each node has:
 
 | Field | Type | Purpose |
 |---|---|---|
-| `handlers` | `HashMap Method HandlerSig` | Handlers at this node (leaf or prefix) |
+| `handlers` | `HashMap Method HandlerFn` | Handlers at this node (leaf or prefix) |
 | `literals` | `HashMap.Raw String RouteTrie` | Exact segment matches (`/todos`) |
 | `param` | `Option (String × RouteTrie)` | Single-segment capture (`{id}`) |
 | `wildcard` | `Option (String × RouteTrie)` | Remainder capture (`{*rest}`), lowest priority |
@@ -904,7 +904,7 @@ Router.empty
 Route-level middleware is added to `Route` before insertion:
 
 ```lean
-def rateLimited (next : HandlerSig) : HandlerSig := ...
+def rateLimited : Middleware := ...
 Router.empty
   |>.addRoute (myRoute.addMiddleware rateLimited)
 ```

@@ -103,7 +103,7 @@ instance : FromRequestParts TodoStoreRef where
   from_request_parts req :=
     match req.extensions.get TodoStoreRef with
     | some ref => .ok ref
-    | none => .error "todo state middleware not installed"
+    | none => .error (.io_error "todo state middleware not installed")
 
 -- ==========================================
 -- Todo Routes

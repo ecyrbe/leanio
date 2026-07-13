@@ -24,7 +24,7 @@ Priority: literal > param (`{param}`) > wildcard (`{*rest}`)
 Uses `HashMap` for handlers and `HashMap.Raw` for literals to allow recursive definition
 -/
 structure RouteTrie where
-  handlers : HashMap Method HandlerSig := ∅
+  handlers : HashMap Method HandlerFn := ∅
   literals : HashMap.Raw String RouteTrie  := ∅
   param    : Option (String × RouteTrie)                := none
   wildcard : Option (String × RouteTrie)                := none
@@ -39,7 +39,7 @@ Inserts a route into the trie given its method, segment list, and composed handl
 
 Middlewares should be composed onto the handler before insertion.
 -/
-def addRoute (trie : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerSig) : RouteTrie :=
+def addRoute (trie : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerFn) : RouteTrie :=
   match segs with
   | [] => { trie with handlers := trie.handlers.insert method handler }
   | Segment.lit s :: rest =>
@@ -56,7 +56,7 @@ def addRoute (trie : RouteTrie) (method : Method) (segs : List Segment) (handler
 Adds a route from a runtime pattern string (e.g. `"/user/{id}"`).
 Useful for programmatic (non-macro) route construction.
 -/
-def addRouteFromPattern (trie : RouteTrie) (method : Method) (pattern : String) (handler : HandlerSig) : RouteTrie :=
+def addRouteFromPattern (trie : RouteTrie) (method : Method) (pattern : String) (handler : HandlerFn) : RouteTrie :=
   let pat := RoutePattern.ofString pattern
   addRoute trie method pat.segments handler
 
@@ -74,10 +74,10 @@ Looks up a handler by method and path segments. Priority: literal > param > wild
 Returns `some (capturedParams, handler)` where `capturedParams` maps param names
 to values, or `none` if no route matches.
 -/
-def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerSig) :=
+def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerFn) :=
   go trie segs []
 where
-  go (t : RouteTrie) (segs : List String) (params : List (String × String)) : Option (List (String × String) × HandlerSig) :=
+  go (t : RouteTrie) (segs : List String) (params : List (String × String)) : Option (List (String × String) × HandlerFn) :=
     match segs with
     -- leaf, do we have a handler ?
     | [] => do
@@ -123,10 +123,10 @@ Example: given a trie containing
 
 (order is deterministic but insertion-dependent, not route-priority).
 -/
-partial def fold (trie : RouteTrie) (f : Method → List Segment → HandlerSig → α → α) (init : α) : α :=
+partial def fold (trie : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
   foldGo f trie [] init
 where
-  foldGo (f : Method → List Segment → HandlerSig → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
+  foldGo (f : Method → List Segment → HandlerFn → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
     let acc := HashMap.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
     let acc := HashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
     let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc

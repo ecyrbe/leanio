@@ -16,7 +16,7 @@ Sub-routers are merged into the trie at construction time — no fallback scan a
 -/
 structure Router where
   trie        : RouteTrie := RouteTrie.empty
-  middlewares : List (HandlerSig → HandlerSig) := []
+  middlewares : List Middleware := []
 
 /-- Creates an empty router with no routes or middlewares. -/
 def Router.empty : Router := {}
@@ -25,8 +25,8 @@ def Router.empty : Router := {}
 Applies a list of middlewares to a handler using left fold.
 Used internally by `addRoute`, `addRouter` and `dispatch`.
 -/
-private def applyMiddlewares (ms : List (HandlerSig → HandlerSig)) (h : HandlerSig) : HandlerSig :=
-  ms.foldl (fun h mw => mw h) h
+private def applyMiddlewares (ms : List Middleware) : Middleware :=
+  ms.foldl (fun h mw => mw h)
 
 /--
 Adds a single route to the router, inserting it into the segment trie.
@@ -72,13 +72,13 @@ Example:
     |>.addMiddleware catchErrors
 ```
 -/
-def Router.addMiddleware (mw : HandlerSig → HandlerSig) (r : Router) : Router :=
+def Router.addMiddleware (mw : Middleware) (r : Router) : Router :=
   { r with middlewares := r.middlewares ++ [mw] }
 
 /--
 Looks up a handler in the trie by method and path segments. O(depth) instead of O(routes).
 -/
-private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option (List (String × String) × HandlerSig) :=
+private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option (List (String × String) × HandlerFn) :=
   router.trie.lookup methodRef pathSegs
 
 /--

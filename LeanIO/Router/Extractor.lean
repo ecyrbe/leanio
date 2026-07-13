@@ -8,7 +8,7 @@ namespace LeanIO
 open Std.Http Std.Async
 
 /--
-Adapts a user-defined handler function into the router's internal `HandlerSig`.
+Adapts a user-defined handler function into the router's internal `HandlerFn`.
 
 A handler function can take up to one body parameter (extracted from the request
 body, implementing `FromRequestBody`) followed by any number of parts parameters
@@ -42,10 +42,10 @@ PUT "/todos/{id}" (body : Json UpdateTodoRequest) (id : Path Nat) => do
 ```
 -/
 class Extractor (Fn : Type) where
-  extract : Fn → Router.HandlerSig
+  extract : Fn → Router.HandlerFn
 
 private class PartsExtractor (Fn : Type) where
-  extractParts : Fn → Router.HandlerSig
+  extractParts : Fn → Router.HandlerFn
 
 instance [IntoResponse R] : Extractor (ContextAsync R) where
   extract handler _ := IntoResponse.into_response handler

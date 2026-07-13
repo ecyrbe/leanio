@@ -23,7 +23,7 @@ Example:
   router.addMiddleware requestLogger
 ```
 -/
-def requestLogger (next : HandlerSig) : HandlerSig := fun req => do
+def requestLogger: Middleware := fun next req => do
   let path := toString req.line.uri.path
   let method := toString req.line.method
   let start ← IO.monoNanosNow
@@ -49,7 +49,7 @@ deriving TypeName
 Router.addMiddleware (withExtension Meta { metadata := "hello" }) router
 ```
 -/
-def withExtension (α : Type) [TypeName α] (data : α) (next : HandlerSig) : HandlerSig := fun req =>
+def withExtension (α : Type) [TypeName α] (data : α) : Middleware := fun next req =>
   next { req with extensions := req.extensions.insert data }
 
 inductive AuthConfig where
@@ -75,8 +75,8 @@ Example:
 ```
 -/
 def catchErrors
-    (onError : IO.Error → ContextAsync (Response Body.Any) := fun _ => Response.internalServerError |>.empty)
-    (next : HandlerSig) : HandlerSig := fun req => do
+    (onError : IO.Error → ContextAsync (Response Body.Any) := fun _ => Response.internalServerError |>.empty):
+    Middleware := fun next req => do
   try
     next req
   catch e =>
@@ -91,7 +91,7 @@ Example:
   router.addMiddleware <| auth (.basic fun user pwd => pure true)
 ```
 -/
-def auth (config: AuthConfig) (next: HandlerSig) : HandlerSig := fun req => do
+def auth (config: AuthConfig) : Middleware := fun next req => do
   let some headerAuth := extractAuthorization req |
     match config with
     | .basic _ =>  Response.unauthorized |>.header .wwwAuthenticate .basicUnauthorized  |>.empty

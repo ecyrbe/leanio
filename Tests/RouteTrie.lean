@@ -3,17 +3,17 @@ open LeanIO.Router
 open Std Http Server
 open Std.Async
 
-def h1 : HandlerSig := fun _ => default
-def h2 : HandlerSig := fun _ => default
-def h3 : HandlerSig := fun _ => default
-def h4 : HandlerSig := fun _ => default
+def h1 : HandlerFn := fun _ => default
+def h2 : HandlerFn := fun _ => default
+def h3 : HandlerFn := fun _ => default
+def h4 : HandlerFn := fun _ => default
 
-def getCap (result : Option (List (String × String) × HandlerSig)) (key : String) : String :=
+def getCap (result : Option (List (String × String) × HandlerFn)) (key : String) : String :=
   match result with
   | some (vs, _) => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
   | none => ""
 
-def nCaps (result : Option (List (String × String) × HandlerSig)) : Nat :=
+def nCaps (result : Option (List (String × String) × HandlerFn)) : Nat :=
   match result with
   | some (vs, _) => vs.length
   | none => 0
@@ -137,7 +137,7 @@ def trie9 := RouteTrie.empty
 -- ==========================================
 -- ofRoutes from Route list
 -- ==========================================
-def dummyRoute (m : Method) (pat : String) (h : HandlerSig) : Route :=
+def dummyRoute (m : Method) (pat : String) (h : HandlerFn) : Route :=
   { method := m, pat := RoutePattern.ofString pat, handler := h }
 
 def trie10 := RouteTrie.ofRoutes

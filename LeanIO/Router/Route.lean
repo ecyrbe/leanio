@@ -7,7 +7,9 @@ namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 
-public abbrev HandlerSig := Request Body.Stream → ContextAsync (Response Body.Any)
+public abbrev HandlerFn := Request Body.Stream → ContextAsync (Response Body.Any)
+
+public abbrev Middleware := HandlerFn → HandlerFn
 
 /-- Carries captured path parameters through request extensions. -/
 public structure RouteParams where
@@ -20,8 +22,8 @@ public def RouteParams.lookup (p : RouteParams) (key : String) : Option String :
 public structure Route where
   method     : Method
   pat        : RoutePattern
-  handler    : HandlerSig
-  middlewares : List (HandlerSig → HandlerSig) := []
+  handler    : HandlerFn
+  middlewares : List Middleware := []
 
 /--
 Appends a middleware to this route. Route middlewares run **after** router-level middlewares,
@@ -33,15 +35,15 @@ Example:
   def router := Router.empty |>.addRoute (adminRoute.addMiddleware auth)
 ```
 -/
-public def Route.addMiddleware (mw : HandlerSig → HandlerSig) (route : Route) : Route :=
-  { route with middlewares := route.middlewares ++ [mw] }
+public def Route.addMiddleware (middleware : Middleware) (route : Route) : Route :=
+  { route with middlewares := route.middlewares ++ [middleware] }
 
 /--
 Runtime route constructor. Prefer the `GET`/`POST`/... term macros for
 compile-time pattern validation and extractor support.
-Use this only when the handler is already built as a `HandlerSig`.
+Use this only when the handler is already built as a `HandlerFn`.
 -/
-public def Route.new (method : Method) (pattern : String) (handler : HandlerSig) : Route :=
+public def Route.new (method : Method) (pattern : String) (handler : HandlerFn) : Route :=
   { method, handler, pat := RoutePattern.ofString pattern }
 
 end LeanIO.Router
