@@ -37,7 +37,7 @@ instance : FromRequestParts CommentStore where
   from_request_parts req :=
     match req.extensions.get CommentStore with
     | some s => .ok s
-    | none => .error "comment store not installed"
+    | none => .error (.io_error "comment store not installed")
 
 private def staticDir : System.FilePath := "Examples/LeanPlay/static"
 
