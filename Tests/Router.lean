@@ -1,6 +1,7 @@
 import LeanIO.Router
 open LeanIO
 open LeanIO.Router
+open Std Http Server
 
 def isOk (e : Except ε α) : Bool :=
   match e with | .ok _ => true | _ => false
@@ -57,3 +58,60 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 #guard (RoutePattern.ofString "/files/{*path}").hasRest == true
 #guard (RoutePattern.ofString "/static/{*any}").segments == [Segment.lit "static", Segment.rest "any"]
 #guard (RoutePattern.ofString "/static/{*any}").hasRest == true
+
+-- Router.toRouteTrie
+def th : HandlerFn := fun _ => default
+def th2 : HandlerFn := fun _ => default
+
+def getCap' (result : Option (List (String × String) × HandlerFn)) (key : String) : String :=
+  match result with
+  | some (vs, _) => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
+  | none => ""
+
+def subRouter : Router := Router.empty
+  |>.addRoute (Route.new .get "/todos" th)
+  |>.addRoute (Route.new .post "/todos" th)
+  |>.addRoute (Route.new .get "/todos/{id}" th)
+
+def rootRouter : Router := Router.empty
+  |>.addRoute (Route.new .get "/health" th)
+  |>.addRouter "/api/v1" subRouter
+
+def rootTrie := rootRouter.toRouteTrie
+
+-- own routes are reachable
+#guard (rootTrie.lookup .get ["health"]).isSome
+-- sub-router routes are reachable under the mount prefix only
+#guard (rootTrie.lookup .get ["api", "v1", "todos"]).isSome
+#guard (rootTrie.lookup .post ["api", "v1", "todos"]).isSome
+#guard (rootTrie.lookup .get ["api", "v1", "todos", "42"]).isSome
+#guard getCap' (rootTrie.lookup .get ["api", "v1", "todos", "42"]) "id" == "42"
+#guard (rootTrie.lookup .get ["todos"]).isNone
+#guard (rootTrie.lookup .put ["api", "v1", "todos"]).isNone
+
+-- nested sub-routers compose prefixes
+def nestedRoot : Router := Router.empty
+  |>.addRouter "/api" (Router.empty |>.addRouter "/v2" subRouter)
+
+#guard ((nestedRoot.toRouteTrie).lookup .get ["api", "v2", "todos"]).isSome
+#guard ((nestedRoot.toRouteTrie).lookup .get ["api", "todos"]).isNone
+
+-- middlewares don't change the shape of the compiled trie
+def mwRouter : Router := rootRouter
+  |>.addMiddleware id
+  |>.addMiddleware id
+
+#guard ((mwRouter.toRouteTrie).lookup .get ["api", "v1", "todos"]).isSome
+#guard ((mwRouter.toRouteTrie).lookup .get ["health"]).isSome
+
+-- empty router compiles to an empty trie
+#guard ((Router.empty.toRouteTrie).lookup .get []).isNone
+
+-- first-registered route wins for identical method+pattern
+def rfirst : Router := Router.empty
+  |>.addRoute (Route.new .get "/dup" th)
+  |>.addRoute (Route.new .get "/dup" th2)
+
+def rtFirst := rfirst.toRouteTrie
+-- Since both are `default` we just check the route is found.
+#guard (rtFirst.lookup .get ["dup"]).isSome

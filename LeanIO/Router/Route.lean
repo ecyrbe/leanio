@@ -16,14 +16,14 @@ public structure RouteParams where
   params : List (String × String)
 deriving TypeName, Inhabited
 
-public def RouteParams.lookup (p : RouteParams) (key : String) : Option String :=
-  p.params.find? (·.1 == key) |>.map (·.2)
+public def RouteParams.lookup (self : RouteParams) (key : String) : Option String :=
+  self.params.find? (·.1 == key) |>.map (·.2)
 
 public structure Route where
   method     : Method
   pat        : RoutePattern
   handler    : HandlerFn
-  middlewares : List Middleware := []
+  middlewares : Array Middleware := #[]
 
 /--
 Appends a middleware to this route. Route middlewares run **after** router-level middlewares,
@@ -35,8 +35,8 @@ Example:
   def router := Router.empty |>.addRoute (adminRoute.addMiddleware auth)
 ```
 -/
-public def Route.addMiddleware (middleware : Middleware) (route : Route) : Route :=
-  { route with middlewares := route.middlewares ++ [middleware] }
+public def Route.addMiddleware (middleware : Middleware) (self : Route) : Route :=
+  { self with middlewares := self.middlewares.push middleware }
 
 /--
 Runtime route constructor. Prefer the `GET`/`POST`/... term macros for

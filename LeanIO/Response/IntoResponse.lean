@@ -17,7 +17,9 @@ public instance : IntoResponse (Response Body.Any) where
   into_response resp := resp
 
 public instance : IntoResponse Unit where
-  into_response _ := Response.ok |>.empty
+  into_response u := do
+    let _ ← u
+    Response.ok |>.empty
 
 public instance : IntoResponse String where
   into_response str := do

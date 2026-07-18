@@ -20,7 +20,7 @@ axum-inspired extractor DSL, middleware chaining, and sub-router mounting.
 - 📁 **File serving** — `File` streams from disk with MIME detection; `RangeFile` adds `206 Partial Content` and `Accept-Ranges`
 - 🏷️ **ETag caching** — `CacheControl` directives with presets; weak ETags for files (mtime+size) and JSON (String.hash)
 - 🧪 **Middlewares** — wraps both request and response; built-in logging, error catching, and auth
-- 🏗️ **Router composition** — segment trie with O(depth) lookup, literal > param > wildcard priority, sub-routers merged at construction time
+- 🏗️ **Router composition** — segment trie with O(depth) lookup, literal > param > wildcard priority, sub-routers merged at serve time
 - 🎯 **IntoResponse** — return `String`, `Status × T`, `Except ε α`, `File`, or implement your own — all streamed, never buffered
 - 🚀 **Deriving** — `FromPath`, `FromQuery`, `FromForm` auto-generated from struct field names
 
@@ -125,7 +125,7 @@ def main : IO Unit := Async.block do
     |>.addMiddleware catchErrors
     |>.addMiddleware requestLogger
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
-  let server ← Server.serve addr router
+  let server ← router.serve addr
   IO.println "Listening on http://127.0.0.1:8080"
   server.waitShutdown
 ```
@@ -146,15 +146,16 @@ This single file contains:
 
 ### 1.2 The router pipeline
 
-The router receives every request first. It looks up the matching handler in the trie,
-composes the middleware chain around it, and then the composed pipeline processes the
-request. The response flows back through every middleware before being returned:
+`Router.serve` compiles the router into a `RouteTrie`, pre-composing every
+middleware chain around its handler. At request time the trie looks up the
+matching pipeline and runs it — no composition happens per request. The
+response flows back through every middleware before being returned:
 
 ```mermaid
 sequenceDiagram
   actor C as Client
   participant S as Server
-  participant R as Router
+  participant R as RouteTrie
   participant M1 as requestLogger
   participant M2 as catchErrors
   participant H as Handler
@@ -179,7 +180,7 @@ sequenceDiagram
   S-->>C: TCP response
 ```
 
-The router composes middlewares around the handler at dispatch time with `foldl`
+Middlewares are composed around the handler at serve time with `foldl`
 (last added runs outermost). Each middleware sees the request on the way in
 and the response on the way out.
 
@@ -268,7 +269,7 @@ Router.empty
   |>.addRoute addTask
 ```
 
-Each route is merged into the trie at construction time. See chapter 6 for details on
+Each route is compiled into the trie at serve time. See chapter 6 for details on
 router composition and sub-router mounting.
 
 ### 2.3 Inline routes
@@ -858,19 +859,26 @@ def getData := GET "/data" (⟨s⟩ : AppState) => do
 
 ## 6. Router
 
-The router holds a **segment trie** for O(depth) route dispatch and a list of
-router-level middlewares. Sub-routers are merged into the trie at construction time
-— there is no delegation at dispatch.
+The router is a **declarative description**: an array of mounted sub-routers, an array
+of routes and an array of router-level middlewares. Nothing is composed at
+registration time. `Router.serve` (via `Router.toRouteTrie`) compiles the whole
+tree into a **segment trie** for O(depth) dispatch — middlewares are pre-composed
+onto every handler exactly once, and there is no delegation or composition at
+dispatch.
 
 ```lean
 structure Router where
-  trie        : RouteTrie := RouteTrie.empty
-  middlewares : List Middleware := []
+  routers     : Array (String × Router) := #[]
+  routes      : Array Route := #[]
+  middlewares : Array Middleware := #[]
 
 def Router.empty                                          : Router
 def Router.addRoute      (route : Route) (self : Router)     : Router
 def Router.addRouter     (self : Router) (pre : String) (sub : Router) : Router
 def Router.addMiddleware (middleware : Middleware) (r : Router) : Router
+def Router.toRouteTrie   (self : Router)                  : RouteTrie
+def Router.serve         (self : Router) (addr : Net.SocketAddress)
+                         (config : Config := {}) (backlog : UInt32 := 1024) : Async Server
 ```
 
 ### 6.1 Route trie
@@ -891,17 +899,18 @@ and the handler, or `none` if no route matches.
 
 ### 6.2 Adding routes
 
-`addRoute` inserts a route into the trie. Route-level middlewares are **pre-composed**
-onto the handler at insertion time (using `foldl`, so the last route-level middleware
-added wraps outermost). The resulting handler is stored in the trie node.
+`addRoute` appends a route to the router's route list. At `toRouteTrie` time each
+route is inserted into the trie with its route-level middlewares **pre-composed**
+onto the handler (using `foldl`, so the last route-level middleware added wraps
+outermost), wrapped by the enclosing router's middlewares.
 
 ```lean
 Router.empty
-  |>.addRoute listTasks     -- 1st: first match wins for conflicts
-  |>.addRoute addTask
+  |>.addRoute listTasks
+  |>.addRoute addTask     -- for an identical method+pattern, the first one wins
 ```
 
-Route-level middleware is added to `Route` before insertion:
+Route-level middleware is added to `Route` before registration:
 
 ```lean
 def rateLimited : Middleware := ...
@@ -911,15 +920,17 @@ Router.empty
 
 ### 6.3 Sub-router mounting
 
-`addRouter` merges `sub` into `r` under `pre`. Internally:
+`addRouter` records `(pre, sub)` in the router's sub-router list. At `toRouteTrie`
+time:
 
-1. Parses `pre` into a list of `Segment` values.
-2. Walks `sub`'s trie via `RouteTrie.fold`.
-3. For each handler found: prepends `pre` segments to the route's segment list,
-   wraps the handler with `sub`'s middlewares, and inserts into `r`'s trie.
+1. `sub` is recursively compiled into its own trie (composing `sub`'s middlewares
+   onto its handlers).
+2. `pre` is parsed into a list of `Segment` values.
+3. Every handler of the compiled sub-trie is re-inserted into the parent trie with
+   the `pre` segments prepended, wrapped by the parent's middlewares.
 
 The sub-router's middlewares only apply to routes originally from that sub-router.
-The merged trie is flat — dispatch is a single trie walk.
+The compiled trie is flat — dispatch is a single trie walk.
 
 ```lean
 def apiV1 : Router := Router.empty
@@ -928,51 +939,49 @@ def apiV1 : Router := Router.empty
   |>.addMiddleware apiAuth       -- applies to listItems and createItem
 
 def root : Router := Router.empty
-  |>.addRouter "/api/v1" apiV1   -- merged into root with prefix prepended
+  |>.addRouter "/api/v1" apiV1   -- mounted under /api/v1 when compiled
   |>.addMiddleware requestLogger -- applies to ALL routes
 ```
 
 ### 6.4 Dispatch
 
-On each incoming request:
+Dispatch is implemented by `RouteTrie`, which implements
+`Std.Http.Server.Handler`. On each incoming request:
 
-1. The path is split into segments via `splitPath`.
+1. The path is split into decoded segments.
 2. `RouteTrie.lookup` walks the trie: literal > param > wildcard priority.
 3. On match, captured parameter names and values are injected into the request's
    extension map as `RouteParams`. Extractors read them back via `FromRequestParts`.
-4. Router-level middlewares are composed around the handler using `foldl`
-   (last added runs outermost, wrapping route-level middlware and the handler).
-5. The composed handler is called with the enriched request.
+4. The stored handler — already wrapped with route, sub-router and router
+   middlewares at compile time — is called with the enriched request.
 
 ```mermaid
 sequenceDiagram
   participant S as Server
-  participant R as Router
   participant T as RouteTrie
   participant M as Middlewares
   participant H as Handler
-  S->>R: onRequest
-  R->>T: lookup(method, pathSegs)
-  T-->>R: (capturedParams, handler)
-  R-->>R: inject RouteParams
-  R-->>R: compose(router.middlewares, handler)
-  R->>M: call composed chain
+  S->>T: onRequest
+  T->>T: lookup(method, pathSegs)
+  T-->>T: inject RouteParams
+  T->>M: call pre-composed chain
   M->>H: next req
   H-->>M: response
-  M-->>R: return
-  R-->>S: response
+  M-->>T: return
+  T-->>S: response
 ```
 
-If no route matches, the router returns `404 Not Found`.
+If no route matches, the trie returns `404 Not Found`.
 
 ### 6.5 Server integration
 
-`Router` implements `Std.Http.Server.Handler`:
+`Router.serve` compiles the router with `toRouteTrie` and hands the trie to
+`Std.Http.Server.serve` (`RouteTrie` implements `Std.Http.Server.Handler`):
 
 ```lean
 def main : IO Unit := Async.block do
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
-  let server ← Server.serve addr router
+  let server ← router.serve addr
   server.waitShutdown
 ```
 

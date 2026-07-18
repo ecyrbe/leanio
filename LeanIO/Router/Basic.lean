@@ -9,58 +9,52 @@ open Std Http Server
 open Std.Async
 
 /--
-A router holds a segment trie for O(depth) route dispatch
-and middlewares applied across the whole router.
+A declarative router: an array of mounted sub-routers, an array of routes and
+an array of middlewares. Nothing is composed at registration time.
 
-Sub-routers are merged into the trie at construction time — no fallback scan at dispatch.
+`Router.serve` (or `Router.toRouteTrie`) compiles the whole tree into a
+`RouteTrie` once, pre-composing all middlewares onto the handlers, so request
+dispatch is a single O(depth) trie lookup with zero per-request composition.
 -/
 structure Router where
-  trie        : RouteTrie := RouteTrie.empty
-  middlewares : List Middleware := []
+  routers     : Array (String × Router) := #[]
+  routes      : Array Route := #[]
+  middlewares : Array Middleware := #[]
 
-/-- Creates an empty router with no routes or middlewares. -/
+/-- Creates an empty router with no routes, sub-routers or middlewares. -/
 def Router.empty : Router := {}
 
 /--
-Applies a list of middlewares to a handler using left fold.
-Used internally by `addRoute`, `addRouter` and `dispatch`.
+Applies an array of middlewares to a handler using left fold.
+Used internally by `Router.toRouteTrie`.
 -/
-private def applyMiddlewares (ms : List Middleware) : Middleware :=
+private def applyMiddlewares (ms : Array Middleware) : Middleware :=
   ms.foldl (fun h mw => mw h)
 
 /--
-Adds a single route to the router, inserting it into the segment trie.
-Route-level middlewares are pre-composed onto the handler at insertion time.
+Adds a single route to the router.
 
-Earlier inserts have higher priority for conflicting patterns (first match wins).
+For an identical method and pattern, the **first** registration wins.
 -/
-def Router.addRoute (route : Route) (r : Router) : Router :=
-  let h := applyMiddlewares route.middlewares route.handler
-  { r with trie := r.trie.addRoute route.method route.pat.segments h }
+def Router.addRoute (route : Route) (self : Router) : Router :=
+  { self with routes := self.routes.push route }
 
 /--
-Merges `sub` into `r` under the prefix `pre`.
+Mounts `sub` under the prefix `pre`.
 
-All routes from `sub` (including recursively merged sub-routers) are inserted
-into `r`'s trie with `pre` prepended to their patterns. `sub`'s middlewares
-are composed onto each merged handler.
+The sub-router is kept as-is and only merged into the trie by `toRouteTrie`,
+where all its routes (including recursively mounted sub-routers) get `pre`
+prepended to their patterns and `sub`'s middlewares composed onto their handlers.
 
 ```lean4
 Router.empty |>.addRouter "/api/v1" todosRouter
 ```
 -/
-def Router.addRouter (r : Router) (pre : String) (sub : Router) : Router :=
-  let prePat := RoutePattern.ofString pre
-  let preSegs := prePat.segments
-  let wrapHandler := applyMiddlewares sub.middlewares
-  let mergedTrie :=
-    RouteTrie.fold sub.trie (fun method segs handler acc =>
-      acc.addRoute method (preSegs ++ segs) (wrapHandler handler)
-    ) r.trie
-  { r with trie := mergedTrie }
+def Router.addRouter (self : Router) (pre : String) (sub : Router) : Router :=
+  { self with routers := self.routers.push (pre, sub) }
 
 /--
-Appends a middleware to the router's middleware list.
+Appends a middleware to the router's middleware array.
 
 Middlewares are applied with `foldl`, so the **last** middleware added runs **first** (outermost).
 In other words, `router.addMiddleware A |>.addMiddleware B` results in `B` wrapping `A`.
@@ -72,34 +66,46 @@ Example:
     |>.addMiddleware catchErrors
 ```
 -/
-def Router.addMiddleware (mw : Middleware) (r : Router) : Router :=
-  { r with middlewares := r.middlewares ++ [mw] }
+def Router.addMiddleware (mw : Middleware) (self : Router) : Router :=
+  { self with middlewares := self.middlewares.push mw }
 
 /--
-Looks up a handler in the trie by method and path segments. O(depth) instead of O(routes).
+Compiles the router tree into a flat `RouteTrie`.
+
+For every route the handler is wrapped as
+`router middlewares (… (sub-router middlewares (route middlewares handler)))`,
+i.e. route-level middlewares are innermost, each enclosing router's middlewares
+wrap around, and the outermost router's middlewares run first.
+
+Own routes are inserted before sub-router routes; sub-router patterns get the
+mount prefix prepended. All composition happens here, once — never at dispatch.
 -/
-private def findRoute (router : Router) (methodRef : Method) (pathSegs : List String) : Option (List (String × String) × HandlerFn) :=
-  router.trie.lookup methodRef pathSegs
+partial def Router.toRouteTrie (self : Router) : RouteTrie :=
+  let wrap := applyMiddlewares self.middlewares
+  let trie := self.routes.foldr (fun route acc =>
+    let h := applyMiddlewares route.middlewares route.handler
+    acc.addRoute route.method route.pat.segments (wrap h)
+  ) RouteTrie.empty
+  self.routers.foldr (fun (pre, sub) acc =>
+    let preSegs := (RoutePattern.ofString pre).segments
+    RouteTrie.fold (Router.toRouteTrie sub) (fun method segs handler acc =>
+      acc.addRoute method (preSegs ++ segs) (wrap handler)
+    ) acc
+  ) trie
 
 /--
-Dispatches an incoming request through the trie. All routes and sub-routes
-are merged into the trie at construction time, so dispatch is a single lookup.
+Compiles the router into a `RouteTrie` and starts an HTTP server on `addr`.
 
-If no route matches, returns 404.
+Dispatch is handled by the `Handler RouteTrie` instance: a single trie lookup
+per request, with all middlewares already composed onto the handlers.
+
+```lean4
+let server ← router.serve addr
+server.waitShutdown
+```
 -/
-private partial def dispatch (router : Router) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
-  let path := toString req.line.uri.path
-  let pathSegs := (splitPath path)
-  match findRoute router req.line.method pathSegs with
-  | some (params, handler) =>
-    let req' := { req with extensions := req.extensions.insert { params : RouteParams } }
-    let wrapped := applyMiddlewares router.middlewares handler
-    wrapped req'
-  | none =>
-    Response.notFound |>.text s!"404 Not Found: {req.line.method} {path}"
-
-/-- Makes `Router` usable as a `Std.Http.Server.Handler`. -/
-instance : Handler Router where
-  onRequest := dispatch
+def Router.serve (self : Router) (addr : Net.SocketAddress)
+    (config : Config := {}) (backlog : UInt32 := 1024) : Async Server :=
+  Server.serve addr self.toRouteTrie config backlog
 
 end LeanIO.Router

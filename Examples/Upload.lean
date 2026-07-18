@@ -52,6 +52,6 @@ def main : IO Unit := Async.block do
     |>.addRoute login
     |>.addMiddleware catchErrors
     |>.addMiddleware requestLogger
-  let server ← Server.serve addr router { maxBodySize := 512 * 1024 * 1024 : Config }
+  let server ← router.serve addr { maxBodySize := 512 * 1024 * 1024 : Config }
   IO.println "Upload server on http://127.0.0.1:8081"
   server.waitShutdown

@@ -243,6 +243,6 @@ def main : IO Unit := Async.block do
     |>.addMiddleware (← todoMiddleware)
     |>.addMiddleware catchErrors -- add second to last to be sure to catch any error
     |>.addMiddleware requestLogger -- add last to be sure to log all errors
-  let server ← Server.serve addr router
+  let server ← router.serve addr
   IO.println "Listening on http://127.0.0.1:8080"
   server.waitShutdown

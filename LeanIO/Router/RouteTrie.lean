@@ -34,39 +34,41 @@ namespace RouteTrie
 /-- Empty trie with no routes. -/
 def empty : RouteTrie := {}
 
+instance : Inhabited RouteTrie := ⟨empty⟩
+
 /--
 Inserts a route into the trie given its method, segment list, and composed handler.
 
 Middlewares should be composed onto the handler before insertion.
 -/
-def addRoute (trie : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerFn) : RouteTrie :=
+def addRoute (self : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerFn) : RouteTrie :=
   match segs with
-  | [] => { trie with handlers := trie.handlers.insert method handler }
+  | [] => { self with handlers := self.handlers.insert method handler }
   | Segment.lit s :: rest =>
-    let child := trie.literals.get? s |>.getD empty
-    { trie with literals := trie.literals.insert s (addRoute child method rest handler) }
+    let child := self.literals.get? s |>.getD empty
+    { self with literals := self.literals.insert s (addRoute child method rest handler) }
   | Segment.param name :: rest =>
-    let child := match trie.param with | some (_, c) => c | none => empty
-    { trie with param := some (name, addRoute child method rest handler) }
+    let child := match self.param with | some (_, c) => c | none => empty
+    { self with param := some (name, addRoute child method rest handler) }
   | Segment.rest name :: rest =>
-    let child := match trie.wildcard with | some (_, c) => c | none => empty
-    { trie with wildcard := some (name, addRoute child method rest handler) }
+    let child := match self.wildcard with | some (_, c) => c | none => empty
+    { self with wildcard := some (name, addRoute child method rest handler) }
 
 /--
 Adds a route from a runtime pattern string (e.g. `"/user/{id}"`).
 Useful for programmatic (non-macro) route construction.
 -/
-def addRouteFromPattern (trie : RouteTrie) (method : Method) (pattern : String) (handler : HandlerFn) : RouteTrie :=
+def addRouteFromPattern (self : RouteTrie) (method : Method) (pattern : String) (handler : HandlerFn) : RouteTrie :=
   let pat := RoutePattern.ofString pattern
-  addRoute trie method pat.segments handler
+  addRoute self method pat.segments handler
 
 /--
 Builds a trie from a list of `Route` values, composing route-level middlewares.
 -/
 def ofRoutes (routes : List Route) : RouteTrie :=
-  routes.foldl (init := empty) fun trie r =>
+  routes.foldl (init := empty) fun self r =>
     let h := r.middlewares.foldl (fun f mw => mw f) r.handler
-    trie.addRoute r.method r.pat.segments h
+    self.addRoute r.method r.pat.segments h
 
 /--
 Looks up a handler by method and path segments. Priority: literal > param > wildcard.
@@ -74,8 +76,8 @@ Looks up a handler by method and path segments. Priority: literal > param > wild
 Returns `some (capturedParams, handler)` where `capturedParams` maps param names
 to values, or `none` if no route matches.
 -/
-def lookup (trie : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerFn) :=
-  go trie segs []
+def lookup (self : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerFn) :=
+  go self segs []
 where
   go (t : RouteTrie) (segs : List String) (params : List (String × String)) : Option (List (String × String) × HandlerFn) :=
     match segs with
@@ -123,8 +125,8 @@ Example: given a trie containing
 
 (order is deterministic but insertion-dependent, not route-priority).
 -/
-partial def fold (trie : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
-  foldGo f trie [] init
+partial def fold (self : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
+  foldGo f self [] init
 where
   foldGo (f : Method → List Segment → HandlerFn → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
     let acc := HashMap.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
@@ -132,5 +134,29 @@ where
     let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
     let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
     acc
+
+/--
+Dispatches an incoming request through the trie: a single O(depth) lookup.
+
+On match, captured path parameters are injected into the request's extensions
+as `RouteParams` and the stored handler is invoked. Middlewares are expected to
+be pre-composed onto handlers before insertion — nothing is composed here.
+
+If no route matches, returns 404.
+-/
+def dispatch (self : RouteTrie) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
+  let method := req.line.method
+  let path := req.line.uri.path
+  let segments := path.toDecodedSegments.toList
+  match self.lookup method segments with
+  | some (params, handler) =>
+    let req' := { req with extensions := req.extensions.insert { params : RouteParams } }
+    handler req'
+  | none =>
+    Response.notFound |>.text s!"Not Found: {method} {path}"
+
+/-- Makes `RouteTrie` usable as a `Std.Http.Server.Handler`. -/
+instance : Handler RouteTrie where
+  onRequest := dispatch
 
 end LeanIO.Router.RouteTrie

@@ -26,6 +26,6 @@ def main : IO Unit := Async.block do
     |>.addMiddleware requestLogger
 
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
-  let server ← Server.serve addr router
+  let server ← router.serve addr
   IO.println "WhoAmI running at http://127.0.0.1:8080"
   server.waitShutdown
