@@ -93,6 +93,10 @@ partial def Router.toRouteTrie (self : Router) : RouteTrie :=
     ) acc
   ) trie
 
+
+instance : Coe Router RouteTrie where
+  coe := Router.toRouteTrie
+
 /--
 Compiles the router into a `RouteTrie` and starts an HTTP server on `addr`.
 
