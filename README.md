@@ -535,8 +535,42 @@ def consume := POST "/xml" (⟨body⟩ : Xml T) => ...
 
 #### 3.5.3 Sum types
 
-`α ⊕ β` chains two `FromRequestBody` instances. The first one whose `HasMimeTypes`
-match the request's `Content-Type` is selected.
+`α ⊕ β` chains two `FromRequestBody` instances. The request's `Content-Type` is matched against the `HasMimeTypes` of each side — the **first** side whose MIME type declares a match for the incoming header wins, and its extractor runs.
+
+**Why use this.** One endpoint, multiple payload formats. A REST API that must
+accept both a typed JSON payload from a rich client **and** an
+`application/x-www-form-urlencoded` form from a browser can use a single
+handler with a sum body extractor.
+
+```lean4
+structure CreateUser where
+  name  : String
+  email : String
+deriving FromJson, FromForm
+
+def createUser := POST "/users"
+    (⟨body⟩ : Json CreateUser ⊕ Form CreateUser) => do
+  match body with
+  | Sum.inl ⟨data⟩ => -- Content-Type: application/json
+    IO.println s!"JSON  → {data.name} <{data.email}>"
+  | Sum.inr ⟨data⟩ => -- Content-Type: application/x-www-form-urlencoded
+    IO.println s!"FORM → {data.name} <{data.email}>"
+  return (Status.created, data)
+```
+
+| `Content-Type` header | Which side is chosen |
+|---|---|
+| `application/json` | `Json CreateUser` (`Sum.inl`) |
+| `application/x-www-form-urlencoded` | `Form CreateUser` (`Sum.inr`) |
+| anything else (e.g. `text/plain`) | 415 Unsupported Media Type |
+
+Both `Json T` and `Form T` derive from the same structure — one `deriving` clause
+is all the boilerplate needed. The handler matches on `Sum.inl` / `Sum.inr` to
+distinguish which format arrived, but the actual shape of the data is identical.
+
+You can chain any pair of body extractors that carry `HasMimeTypes`. For example
+`PlainText ⊕ Json T` dispatches between `text/plain` and `application/json`;
+`MultiPartForm ⊕ Json T` handles file-upload vs JSON on the same URI.
 
 ### 3.6 Handler signature rules
 
