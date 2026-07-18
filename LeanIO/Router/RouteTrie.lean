@@ -24,10 +24,10 @@ Priority: literal > param (`{param}`) > wildcard (`{*rest}`)
 Uses `HashMap` for handlers and `HashMap.Raw` for literals to allow recursive definition
 -/
 structure RouteTrie where
-  handlers : HashMap Method HandlerFn := ∅
-  literals : HashMap.Raw String RouteTrie  := ∅
-  param    : Option (String × RouteTrie)                := none
-  wildcard : Option (String × RouteTrie)                := none
+  handlers : HashMap Method HandlerFn     := ∅
+  literals : HashMap.Raw String RouteTrie := ∅
+  param    : Option (String × RouteTrie)  := none
+  wildcard : Option (String × RouteTrie)  := none
 
 namespace RouteTrie
 
