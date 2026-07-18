@@ -36,6 +36,8 @@ def empty : RouteTrie := {}
 
 instance : Inhabited RouteTrie := ⟨empty⟩
 
+instance : EmptyCollection RouteTrie := ⟨empty⟩
+
 /--
 Inserts a route into the trie given its method, segment list, and composed handler.
 
