@@ -29,3 +29,8 @@ srcDir = "Examples/WhoAmI"
 [[lean_lib]]
 name = "Tests"
 globs = ["Tests.+"]
+
+[[lean_exe]]
+name = "sumtest"
+root = "SumServer"
+srcDir = "Examples"

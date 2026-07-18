@@ -546,27 +546,25 @@ handler with a sum body extractor.
 structure CreateUser where
   name  : String
   email : String
-deriving FromJson, FromForm
+deriving FromJson, FromForm, ToJson
 
 def createUser := POST "/users"
-    (⟨body⟩ : Json CreateUser ⊕ Form CreateUser) => do
-  match body with
-  | Sum.inl ⟨data⟩ => -- Content-Type: application/json
-    IO.println s!"JSON  → {data.name} <{data.email}>"
-  | Sum.inr ⟨data⟩ => -- Content-Type: application/x-www-form-urlencoded
-    IO.println s!"FORM → {data.name} <{data.email}>"
-  return (Status.created, data)
+    (body : Json CreateUser ⊕ Form CreateUser) => do
+  let data : CreateUser := match body with
+    | Sum.inl j => j.body
+    | Sum.inr f => f.value
+  pure (Status.created, data)
 ```
 
-| `Content-Type` header | Which side is chosen |
-|---|---|
-| `application/json` | `Json CreateUser` (`Sum.inl`) |
-| `application/x-www-form-urlencoded` | `Form CreateUser` (`Sum.inr`) |
-| anything else (e.g. `text/plain`) | 415 Unsupported Media Type |
+| `Content-Type` header | Which side is chosen | Response |
+|---|---|---|
+| `application/json` | `Json CreateUser` (`Sum.inl`) | 201 Created |
+| `application/x-www-form-urlencoded` | `Form CreateUser` (`Sum.inr`) | 201 Created |
+| anything else (e.g. `text/plain`) | — | 415 Unsupported Media Type |
 
-Both `Json T` and `Form T` derive from the same structure — one `deriving` clause
-is all the boilerplate needed. The handler matches on `Sum.inl` / `Sum.inr` to
-distinguish which format arrived, but the actual shape of the data is identical.
+Both `Json T` and `Form T` can derive from the same underlying structure — a single
+`deriving` clause covers all the boilerplate. The handler extracts the common `data`
+via `match` regardless of which format arrived.
 
 You can chain any pair of body extractors that carry `HasMimeTypes`. For example
 `PlainText ⊕ Json T` dispatches between `text/plain` and `application/json`;
@@ -1067,16 +1065,17 @@ Additional `Std.Http.Header.Name` constants beyond Std's built-in set:
 ### 7.2 Examples
 
 | File | Description |
-|---|---|
+|---|---|---|
 | [`Examples/Todos.lean`](./Examples/Todos.lean) | Full REST API: todos + comments, pagination, auth, sub-routers, catch-all |
 | [`Examples/Upload.lean`](./Examples/Upload.lean) | File uploads: `MultiPartForm` streaming, `Form` URL-encoded body |
+| [`Examples/SumServer.lean`](./Examples/SumServer.lean) | Sum types: `Json T ⊕ Form T` dispatches on `Content-Type` |
 | [`Examples/LeanPlay/Main.lean`](./Examples/LeanPlay/Main.lean) | Video browser: static file serving with `File`/`RangeFile`, custom middleware |
 | [`Examples/WhoAmI/WhoAmI.lean`](./Examples/WhoAmI/WhoAmI.lean) | Client IP: `RemoteAddr` extractor with a single-page frontend |
 
 Run an example:
 
 ```bash
-lake build todos // or upload or leanplay
+lake build todos // or upload sumtest leanplay whoami
 lake exec todos
 ```
 
