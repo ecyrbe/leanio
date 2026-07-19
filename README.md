@@ -190,14 +190,14 @@ from the underlying `Body.Stream`.
 
 ### 1.3 What's next
 
-| To... | Read chapter |
-|---|---|
-| Define routes with path parameters, compile-time validation | [2. Routes](#2-routes) |
+| To...                                                          | Read chapter                   |
+| -------------------------------------------------------------- | ------------------------------ |
+| Define routes with path parameters, compile-time validation    | [2. Routes](#2-routes)         |
 | Extract path params, JSON bodies, forms, file uploads, queries | [3. Extractors](#3-extractors) |
-| Return strings, JSON, status codes, files, cached responses | [4. Responses](#4-responses) |
-| Add logging, error handling, auth, shared state | [5. Middleware](#5-middleware) |
-| Compose sub-routers under path prefixes | [6. Router](#6-router) |
-| All HTTP methods, utility types, examples | [7. Reference](#7-reference) |
+| Return strings, JSON, status codes, files, cached responses    | [4. Responses](#4-responses)   |
+| Add logging, error handling, auth, shared state                | [5. Middleware](#5-middleware) |
+| Compose sub-routers under path prefixes                        | [6. Router](#6-router)         |
+| All HTTP methods, utility types, examples                      | [7. Reference](#7-reference)   |
 
 ---
 
@@ -230,11 +230,11 @@ structure Route where
 
 #### Pattern syntax
 
-| Syntax | Segment | Extractor |
-|---|---|---|
-| `/todos` | `lit "todos"` | — |
-| `{id}` | `param "id"` | `Path Nat`, `Path String`, etc. |
-| `{*rest}` | `rest "rest"` | `Path String` |
+| Syntax    | Segment       | Extractor                       |
+| --------- | ------------- | ------------------------------- |
+| `/todos`  | `lit "todos"` | —                               |
+| `{id}`    | `param "id"`  | `Path Nat`, `Path String`, etc. |
+| `{*rest}` | `rest "rest"` | `Path String`                   |
 
 Param names must start with a letter or underscore and contain only alphanumeric
 characters or underscores. The macro rejects invalid patterns at compile time.
@@ -439,12 +439,12 @@ structure FormFile where
 either a `.field` (in-memory string) or a `.file` (streamed from the body).
 `FormFile` provides four methods for consuming the file body:
 
-| Method | Signature | Description |
-|---|---|---|
-| `.save` | `System.FilePath → ContextAsync Unit` | Streams chunks to disk |
-| `.bytes` | `ContextAsync ByteArray` | Reads all chunks into memory |
-| `.stream` | `(ByteArray → ContextAsync Unit) → ContextAsync Unit` | Calls a callback per chunk |
-| `.discard` | `ContextAsync Unit` | Reads and discards all chunks |
+| Method     | Signature                                             | Description                   |
+| ---------- | ----------------------------------------------------- | ----------------------------- |
+| `.save`    | `System.FilePath → ContextAsync Unit`                 | Streams chunks to disk        |
+| `.bytes`   | `ContextAsync ByteArray`                              | Reads all chunks into memory  |
+| `.stream`  | `(ByteArray → ContextAsync Unit) → ContextAsync Unit` | Calls a callback per chunk    |
+| `.discard` | `ContextAsync Unit`                                   | Reads and discards all chunks |
 
 ```lean
 def upload := POST "/upload" (mp : MultiPartForm) => do
@@ -491,16 +491,16 @@ def listItems := GET "/todos" (⟨page⟩ : Query Pagination) => do
 
 These `FromRequestParts` instances extract raw request metadata without a wrapper type:
 
-| Extractor | Type | Description |
-|---|---|---|
-| `Method` | `Std.Http.Method` | HTTP method |
-| `Version` | `Std.Http.Version` | HTTP version |
-| `Headers` | `Std.Http.Headers` | All request headers |
-| `URI.Path` | `String` | Request path |
-| `URI.Query` | `String` | Raw query string |
-| `RequestTarget` | `String` | Full request URI |
-| `HeaderRange` | `HeaderRange` | Parsed `Range` header |
-| `RemoteAddr` | `Std.Http.Server.RemoteAddr` | Remote client IP |
+| Extractor       | Type                         | Description           |
+| --------------- | ---------------------------- | --------------------- |
+| `Method`        | `Std.Http.Method`            | HTTP method           |
+| `Version`       | `Std.Http.Version`           | HTTP version          |
+| `Headers`       | `Std.Http.Headers`           | All request headers   |
+| `URI.Path`      | `String`                     | Request path          |
+| `URI.Query`     | `String`                     | Raw query string      |
+| `RequestTarget` | `String`                     | Full request URI      |
+| `HeaderRange`   | `HeaderRange`                | Parsed `Range` header |
+| `RemoteAddr`    | `Std.Http.Server.RemoteAddr` | Remote client IP      |
 
 ### 3.5 Custom extractors
 
@@ -556,11 +556,11 @@ def createUser := POST "/users"
   pure (Status.created, data)
 ```
 
-| `Content-Type` header | Which side is chosen | Response |
-|---|---|---|
-| `application/json` | `Json CreateUser` (`Sum.inl`) | 201 Created |
-| `application/x-www-form-urlencoded` | `Form CreateUser` (`Sum.inr`) | 201 Created |
-| anything else (e.g. `text/plain`) | — | 415 Unsupported Media Type |
+| `Content-Type` header               | Which side is chosen          | Response                   |
+| ----------------------------------- | ----------------------------- | -------------------------- |
+| `application/json`                  | `Json CreateUser` (`Sum.inl`) | 201 Created                |
+| `application/x-www-form-urlencoded` | `Form CreateUser` (`Sum.inr`) | 201 Created                |
+| anything else (e.g. `text/plain`)   | —                             | 415 Unsupported Media Type |
 
 Both `Json T` and `Form T` can derive from the same underlying structure — a single
 `deriving` clause covers all the boilerplate. The handler extracts the common `data`
@@ -574,12 +574,12 @@ You can chain any pair of body extractors that carry `HasMimeTypes`. For example
 
 The extractor system supports these handler shapes:
 
-| Shape | Example |
-|---|---|
-| `ContextAsync R` (no extractors) | `GET "/ping" => do ...` |
-| `R` (0 params, sync) | `GET "/ping" => "pong"` |
-| `BodyExtractor → Rest` (1 body + parts) | `POST "/todos" (⟨b⟩ : Json T) => ...` |
-| `PartsExtractor → Rest` (parts only) | `GET "/todos/{id}" (⟨id⟩ : Path Nat) => ...` |
+| Shape                                   | Example                                      |
+| --------------------------------------- | -------------------------------------------- |
+| `ContextAsync R` (no extractors)        | `GET "/ping" => do ...`                      |
+| `R` (0 params, sync)                    | `GET "/ping" => "pong"`                      |
+| `BodyExtractor → Rest` (1 body + parts) | `POST "/todos" (⟨b⟩ : Json T) => ...`        |
+| `PartsExtractor → Rest` (parts only)    | `GET "/todos/{id}" (⟨id⟩ : Path Nat) => ...` |
 
 At most one body extractor is allowed, and it must appear before any parts extractors.
 
@@ -604,17 +604,17 @@ class IntoResponseExt (α : Type) where
 
 ### 4.1 Built-in response types
 
-| Return type | Status | Body |
-|---|---|---|
-| `String` | `200` | `text/plain` |
-| `Unit` / `()` | `200` | Empty |
-| `IO.Error` | `500` | Error message |
-| `Status` | Given status | Empty |
-| `T` (with `ToJson T`) | `200` | `application/json` |
-| `Status × String` | Given status | `text/plain` |
-| `Status × T` (with `ToJson T`) | Given status | `application/json` |
-| `Status × Headers × T` (with `ToJson T`) | Given status | Custom headers + JSON |
-| `Except ε α` | `.ok` → rhs, `.error` → lhs | Delegated |
+| Return type                              | Status                      | Body                  |
+| ---------------------------------------- | --------------------------- | --------------------- |
+| `String`                                 | `200`                       | `text/plain`          |
+| `Unit` / `()`                            | `200`                       | Empty                 |
+| `IO.Error`                               | `500`                       | Error message         |
+| `Status`                                 | Given status                | Empty                 |
+| `T` (with `ToJson T`)                    | `200`                       | `application/json`    |
+| `Status × String`                        | Given status                | `text/plain`          |
+| `Status × T` (with `ToJson T`)           | Given status                | `application/json`    |
+| `Status × Headers × T` (with `ToJson T`) | Given status                | Custom headers + JSON |
+| `Except ε α`                             | `.ok` → rhs, `.error` → lhs | Delegated             |
 
 ```lean
 def created  := POST "/items" ... => do
@@ -641,10 +641,10 @@ structure File where
   cacheControl : Option CacheControl := some <| CacheControl.publicStatic 0
 ```
 
-| Field | Default | Description |
-|---|---|---|
-| `path` | *(required)* | Path to the file on disk |
-| `cacheControl` | `some <| publicStatic 0` | When `some cc`, sends `ETag`, `Cache-Control`, and supports `304 Not Modified`. When `none`, no caching headers are sent |
+| Field          | Default      | Description              |
+| -------------- | ------------ | ------------------------ |
+| `path`         | *(required)* | Path to the file on disk |
+| `cacheControl` | `some <      | publicStatic 0`          | When `some cc`, sends `ETag`, `Cache-Control`, and supports `304 Not Modified`. When `none`, no caching headers are sent |
 
 `ETag` is a weak validator computed from the file's `mtime` and byte size.
 
@@ -669,11 +669,11 @@ structure RangeFile where
   cacheControl : Option CacheControl := some <| CacheControl.publicStatic 0
 ```
 
-| Range format | Meaning |
-|---|---|
+| Range format  | Meaning                  |
+| ------------- | ------------------------ |
 | `bytes=0-499` | Bytes 0 to 499 inclusive |
-| `bytes=500-` | Bytes 500 to end of file |
-| `bytes=-500` | Last 500 bytes |
+| `bytes=500-`  | Bytes 500 to end of file |
+| `bytes=-500`  | Last 500 bytes           |
 
 Out-of-bounds ranges return `416 Range Not Satisfiable`.
 
@@ -756,11 +756,11 @@ def timingMiddleware : Middleware := fun next req => do
 
 Middleware can be attached at three levels:
 
-| Level | Method | Scope |
-|---|---|---|
-| Route | `route.addMiddleware mw` | That route only |
-| Sub-router | `subRouter.addMiddleware mw` | All routes in the sub-router |
-| Root router | `router.addMiddleware mw` | All routes |
+| Level       | Method                       | Scope                        |
+| ----------- | ---------------------------- | ---------------------------- |
+| Route       | `route.addMiddleware mw`     | That route only              |
+| Sub-router  | `subRouter.addMiddleware mw` | All routes in the sub-router |
+| Root router | `router.addMiddleware mw`    | All routes                   |
 
 Middleware runs in **last-added-first** order: the last middleware added wraps all
 earlier ones. A typical stack:
@@ -917,12 +917,12 @@ def Router.serve         (self : Router) (addr : Net.SocketAddress)
 
 The `RouteTrie` is a segment-based dispatch tree. Each node has:
 
-| Field | Type | Purpose |
-|---|---|---|
-| `handlers` | `HashMap Method HandlerFn` | Handlers at this node (leaf or prefix) |
-| `literals` | `HashMap.Raw String RouteTrie` | Exact segment matches (`/todos`) |
-| `param` | `Option (String × RouteTrie)` | Single-segment capture (`{id}`) |
-| `wildcard` | `Option (String × RouteTrie)` | Remainder capture (`{*rest}`), lowest priority |
+| Field      | Type                           | Purpose                                        |
+| ---------- | ------------------------------ | ---------------------------------------------- |
+| `handlers` | `HashMap Method HandlerFn`     | Handlers at this node (leaf or prefix)         |
+| `literals` | `HashMap.Raw String RouteTrie` | Exact segment matches (`/todos`)               |
+| `param`    | `Option (String × RouteTrie)`  | Single-segment capture (`{id}`)                |
+| `wildcard` | `Option (String × RouteTrie)`  | Remainder capture (`{*rest}`), lowest priority |
 
 **Lookup.** Given a method and a list of path segments, `RouteTrie.lookup` walks the
 trie from the root. At each node, it tries literal match, then param match, then
@@ -1027,50 +1027,50 @@ def main : IO Unit := Async.block do
 
 Additional `Std.Http.Header.Name` constants beyond Std's built-in set:
 
-| Constant | Value |
-|---|---|
+| Constant             | Value                 |
+| -------------------- | --------------------- |
 | `contentDisposition` | `content-disposition` |
-| `acceptRanges` | `accept-ranges` |
-| `contentRange` | `content-range` |
-| `range` | `range` |
-| `wwwAuthenticate` | `www-authenticate` |
-| `cacheControl` | `cache-control` |
-| `etag` | `etag` |
-| `ifNoneMatch` | `if-none-match` |
-| `lastModified` | `last-modified` |
-| `ifModifiedSince` | `if-modified-since` |
+| `acceptRanges`       | `accept-ranges`       |
+| `contentRange`       | `content-range`       |
+| `range`              | `range`               |
+| `wwwAuthenticate`    | `www-authenticate`    |
+| `cacheControl`       | `cache-control`       |
+| `etag`               | `etag`                |
+| `ifNoneMatch`        | `if-none-match`       |
+| `lastModified`       | `last-modified`       |
+| `ifModifiedSince`    | `if-modified-since`   |
 
 #### MIME type constants
 
-| Constant | Value |
-|---|---|
-| `MimeType.octetStream` | `application/octet-stream` |
-| `MimeType.textPlain` | `text/plain` |
-| `MimeType.textHtml` | `text/html` |
-| `MimeType.textCss` | `text/css` |
-| `MimeType.textJavascript` | `text/javascript` |
-| `MimeType.imagePng` | `image/png` |
-| `MimeType.imageJpeg` | `image/jpeg` |
-| `MimeType.imageSvg` | `image/svg+xml` |
-| `MimeType.imageWebp` | `image/webp` |
-| `MimeType.videoMp4` | `video/mp4` |
-| `MimeType.videoWebm` | `video/webm` |
-| `MimeType.audioMpeg` | `audio/mpeg` |
-| `MimeType.applicationJson` | `application/json` |
-| `MimeType.applicationPdf` | `application/pdf` |
-| `MimeType.applicationZip` | `application/zip` |
-| `MimeType.formUrlEncoded` | `application/x-www-form-urlencoded` |
-| `MimeType.multipartForm` | `multipart/form-data` |
+| Constant                   | Value                               |
+| -------------------------- | ----------------------------------- |
+| `MimeType.octetStream`     | `application/octet-stream`          |
+| `MimeType.textPlain`       | `text/plain`                        |
+| `MimeType.textHtml`        | `text/html`                         |
+| `MimeType.textCss`         | `text/css`                          |
+| `MimeType.textJavascript`  | `text/javascript`                   |
+| `MimeType.imagePng`        | `image/png`                         |
+| `MimeType.imageJpeg`       | `image/jpeg`                        |
+| `MimeType.imageSvg`        | `image/svg+xml`                     |
+| `MimeType.imageWebp`       | `image/webp`                        |
+| `MimeType.videoMp4`        | `video/mp4`                         |
+| `MimeType.videoWebm`       | `video/webm`                        |
+| `MimeType.audioMpeg`       | `audio/mpeg`                        |
+| `MimeType.applicationJson` | `application/json`                  |
+| `MimeType.applicationPdf`  | `application/pdf`                   |
+| `MimeType.applicationZip`  | `application/zip`                   |
+| `MimeType.formUrlEncoded`  | `application/x-www-form-urlencoded` |
+| `MimeType.multipartForm`   | `multipart/form-data`               |
 
 ### 7.2 Examples
 
-| File | Description |
-|---|---|---|
-| [`Examples/Todos.lean`](./Examples/Todos.lean) | Full REST API: todos + comments, pagination, auth, sub-routers, catch-all |
-| [`Examples/Upload.lean`](./Examples/Upload.lean) | File uploads: `MultiPartForm` streaming, `Form` URL-encoded body |
-| [`Examples/SumServer.lean`](./Examples/SumServer.lean) | Sum types: `Json T ⊕ Form T` dispatches on `Content-Type` |
+| File                                                           | Description                                                                   |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [`Examples/Todos.lean`](./Examples/Todos.lean)                 | Full REST API: todos + comments, pagination, auth, sub-routers, catch-all     |
+| [`Examples/Upload.lean`](./Examples/Upload.lean)               | File uploads: `MultiPartForm` streaming, `Form` URL-encoded body              |
+| [`Examples/SumServer.lean`](./Examples/SumServer.lean)         | Sum types: `Json T ⊕ Form T` dispatches on `Content-Type`                     |
 | [`Examples/LeanPlay/Main.lean`](./Examples/LeanPlay/Main.lean) | Video browser: static file serving with `File`/`RangeFile`, custom middleware |
-| [`Examples/WhoAmI/WhoAmI.lean`](./Examples/WhoAmI/WhoAmI.lean) | Client IP: `RemoteAddr` extractor with a single-page frontend |
+| [`Examples/WhoAmI/WhoAmI.lean`](./Examples/WhoAmI/WhoAmI.lean) | Client IP: `RemoteAddr` extractor with a single-page frontend                 |
 
 Run an example:
 
