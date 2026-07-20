@@ -68,16 +68,17 @@ instance : HasMimeTypes (Form α) where
 instance [FromForm α] : FromRequestBody (Form α) where
   from_request_body req := do
     match checkMimeTypes (Form α) req.line.headers with
-    | .ok _ => pure ()
     | .error e => return .error (.bad_media_error e)
-
-    let body : ByteArray ← req.body.readAll
-    match parseQuery {} body.iter with
-    | .success _ query =>
-      match FromForm.fromForm query with
-      | .ok v => return .ok { value := v }
-      | .error e => return .error (.semantic_error e)
-    | .error _ .eof => return .error (.syntax_error "Form Body is incomplete")
-    | .error _ (.other e) => return .error (.syntax_error e)
+    | .ok _ =>
+      try
+        let body : ByteArray ← req.body.readAll
+        match parseQuery {} body.iter with
+        | .success _ query =>
+          match FromForm.fromForm query with
+          | .ok v => return .ok { value := v }
+          | .error e => return .error (.semantic_error e)
+        | .error _ .eof => return .error (.syntax_error "Form Body is incomplete")
+        | .error _ (.other e) => return .error (.syntax_error e)
+      catch e => return .error (.io_error e)
 
 end LeanIO

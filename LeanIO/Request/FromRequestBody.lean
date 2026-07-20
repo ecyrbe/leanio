@@ -36,17 +36,17 @@ instance: HasMimeTypes (Json α) where
 instance [FromJson α] : FromRequestBody (Json α) where
   from_request_body req := do
     match checkMimeTypes (Json α) req.line.headers with
-    | .ok _ => pure ()
     | .error e => return .error (.bad_media_error e)
-    try
-      let body : String ← req.body.readAll
-      match Lean.Json.parse body with
-      | .ok json =>
-        match FromJson.fromJson? json with
-        | .ok obj => return .ok {body:=obj}
-        | .error e => return .error (.semantic_error e)
-      | .error e => return .error (.syntax_error e)
-    catch e => return .error (.io_error e)
+    | .ok _ =>
+      try
+        let body : String ← req.body.readAll
+        match Lean.Json.parse body with
+        | .ok json =>
+          match FromJson.fromJson? json with
+          | .ok obj => return .ok {body:=obj}
+          | .error e => return .error (.semantic_error e)
+        | .error e => return .error (.syntax_error e)
+      catch e => return .error (.io_error e)
 
 structure PlainText where
   body: String
@@ -56,13 +56,13 @@ instance : HasMimeTypes PlainText where
 
 instance : FromRequestBody PlainText where
   from_request_body req := do
-    match checkMimeTypes (PlainText) req.line.headers with
-    | .ok _ => pure ()
+    match checkMimeTypes PlainText req.line.headers with
     | .error e => return .error (.bad_media_error e)
-    try
-      let body : String ← req.body.readAll
-      return .ok {body}
-    catch e => return .error (.io_error e)
+    | .ok _ =>
+      try
+        let body : String ← req.body.readAll
+        return .ok {body}
+      catch e => return .error (.io_error e)
 
 instance[FromRequestBody α] [HasMimeTypes α] [FromRequestBody β] [HasMimeTypes β]: FromRequestBody (α ⊕ β) where
   from_request_body req := do

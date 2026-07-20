@@ -93,16 +93,16 @@ instance : FromRequestBody MultiPartForm where
   from_request_body req := do
     match checkMimeTypes MultiPartForm req.line.headers with
     | .error e => return .error (.bad_media_error e)
-    | .ok _ => pure ()
-    let some contentType := req.line.headers.get? .contentType | return .error (.bad_media_error "missing Content-Type header")
-    let some boundary := extractParam (toString contentType) "boundary" | return .error (.syntax_error "failed to extract boundary from content-type")
-    let boundSep := ("\r\n--" ++ boundary).toUTF8
-    let inner : MultipartInner := {
-        boundStart := boundSep.extract 2 boundSep.size
-        boundSepSearch := Search.new (ChunkBuffer.ofByteArray boundSep)
-        stream := req.body
-      }
-    let ref ← IO.mkRef inner
-    return .ok { inner := ref }
+    | .ok _ =>
+      let some contentType := req.line.headers.get? .contentType | return .error (.bad_media_error "missing Content-Type header")
+      let some boundary := extractParam (toString contentType) "boundary" | return .error (.syntax_error "failed to extract boundary from content-type")
+      let boundSep := ("\r\n--" ++ boundary).toUTF8
+      let inner : MultipartInner := {
+          boundStart := boundSep.extract 2 boundSep.size
+          boundSepSearch := Search.new (ChunkBuffer.ofByteArray boundSep)
+          stream := req.body
+        }
+      let ref ← IO.mkRef inner
+      return .ok { inner := ref }
 
 end LeanIO
