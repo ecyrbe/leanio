@@ -32,9 +32,7 @@ instance [AllRepr τs] : Repr (HList τs) where
   reprPrec xs _ :=
     match AllRepr.reprElems xs with
     | [] => "[]ₕ"
-    | l  =>
-        let inner :=  l.intersperse ", " |> Std.Format.join
-        "[" ++ inner ++ "]ₕ"
+    | l  => Std.Format.bracketFill "[" (Std.Format.joinSep l ("," ++ Std.Format.line)) "]ₕ"
 
 instance [AllRepr τs] : ToString (HList τs) where
   toString xs := reprStr xs
