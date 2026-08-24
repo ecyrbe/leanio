@@ -1,6 +1,7 @@
 module
 
 import LeanIO
+import LeanIO.Json.Std
 open Std Async
 open Std Http Server
 open LeanIO
