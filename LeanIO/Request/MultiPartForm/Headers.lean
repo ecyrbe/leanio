@@ -1,14 +1,17 @@
+module
+
 import Lean
 import LeanIO.Utils
 import LeanIO.Data.ChunkBuffer
 import LeanIO.Data.String
-import LeanIO.Data.Headers.HeaderName
+public import Std.Http.Data.Headers
+public import LeanIO.Data.Headers.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Slice
 
 /-- Parse a header line "Name: value" into a `(Name, Value)` pair. Splits on first colon only. -/
-def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
+public def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
   match String.splitOnce line ':' with
   | none => none
   | some (name, value) =>
@@ -19,7 +22,7 @@ def parseOneHeader (line : String) : Option (Header.Name × Header.Value) :=
     | _,_ => none
 
 /-- Parse raw header bytes into `Std.Http.Headers`. Returns `none` on parse failure. -/
-def parseHeaders (hdrBytes : ByteArray) : Option Headers := do
+public def parseHeaders (hdrBytes : ByteArray) : Option Headers := do
   let hdrStr ← String.fromUTF8? hdrBytes
   (hdrStr.splitOn "\r\n").foldlM (fun (hds : Headers) (line : String) =>
     let clean := line.trimAscii.toString
@@ -36,7 +39,7 @@ Parse a parameter value, handling quoted strings with escaped quotes.
 - `"abc"` → `abc`
 - `"ab\"c"` → `ab"c"
 -/
-def parseParamValue (s : String.Slice) : Option String :=
+public def parseParamValue (s : String.Slice) : Option String :=
   let inner := s.toString
   if inner.startsWith "\"" then
     let chars := inner.toRawSubstring.drop 1
@@ -58,7 +61,7 @@ def parseParamValue (s : String.Slice) : Option String :=
     some unquoted.toString
 
 /-- Extract a parameter from a semicolon-separated header value (Content-Type, Content-Disposition, etc). -/
-def extractParam (params : String) (key : String) : Option String :=
+public def extractParam (params : String) (key : String) : Option String :=
   let keySuffix := key ++ "="
   params.split (· == ';')
   |>.findSome? (fun part =>
@@ -67,19 +70,19 @@ def extractParam (params : String) (key : String) : Option String :=
   |>.bind fun s => if s.isEmpty then none else some s
 
 /-- Extract a parameter value from a form-data content disposition header. -/
-def filenameParam (hds : Headers) : Option String :=
+public def filenameParam (hds : Headers) : Option String :=
   match hds.get? .contentDisposition with
   | none => none
   | some v => extractParam v.value "filename"
 
 /-- Extract a parameter value from a form-data content disposition header. -/
-def nameParam (hds : Headers) : Option String :=
+public def nameParam (hds : Headers) : Option String :=
   match hds.get? .contentDisposition with
   | none => none
   | some v => extractParam v.value "name"
 
 /-- Extract the Content-Type from headers, defaulting to `text/plain` per RFC 2046 §5.1. -/
-def headerContentType (hds : Headers) : String :=
+public def headerContentType (hds : Headers) : String :=
   match hds.get? .contentType with
   | some v => v.value
   | none => "text/plain"

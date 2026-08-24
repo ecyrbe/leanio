@@ -1,4 +1,6 @@
-import LeanIO.Router.RoutePattern
-import LeanIO.Router.Route
-import LeanIO.Router.Basic
-import LeanIO.Router.Macro
+module
+
+public import LeanIO.Router.RoutePattern
+public import LeanIO.Router.Route
+public import LeanIO.Router.Basic
+public import LeanIO.Router.Macro

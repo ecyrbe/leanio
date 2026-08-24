@@ -1,8 +1,10 @@
-import Lean
+module
+
+public meta import Lean
 import Std.Http
 import LeanIO.Router.RoutePattern
 import LeanIO.Router.Route
-import LeanIO.Router.Extractor
+public import LeanIO.Router.Extractor
 
 namespace LeanIO.Router
 open Std Http Server
@@ -10,7 +12,7 @@ open Std.Async
 open Lean
 open Lean.Macro
 
-def isValidParamName (s : String) : Bool :=
+public meta def isValidParamName (s : String) : Bool :=
   if s.isEmpty then false
   else
     let first := s.front
@@ -18,7 +20,7 @@ def isValidParamName (s : String) : Bool :=
 
 /-- Validates route pattern structure: balanced braces, valid param names,
 and ensures `{*name}` rest params appear only as the last segment. -/
-def validateRoutePattern (s : String) : Except String Unit := do
+public meta def validateRoutePattern (s : String) : Except String Unit := do
   unless s.startsWith "/" do
     throw "route pattern must start with '/'"
   let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
@@ -46,7 +48,7 @@ def validateRoutePattern (s : String) : Except String Unit := do
 
 /-- Returns each path parameter name from a pattern string like "/user/{id}"
 or "/files/{*path}". For rest params, the `*` is stripped from the name. -/
-def extractParamNames (s : String) : List String :=
+public meta def extractParamNames (s : String) : List String :=
   let parts := s.split '/' |>.map toString |>.filter (¬ ·.isEmpty) |>.toList
   parts.filterMap fun p =>
     if p.startsWith '{' && p.endsWith '}' then
@@ -58,10 +60,10 @@ def extractParamNames (s : String) : List String :=
     else
       none
 
-syntax extractorBinder := "(" term ":" term ")"
+public syntax extractorBinder := "(" term ":" term ")"
 
 /-- Builds a precomputed `RoutePattern` term from a path pattern string. -/
-private def mkRoutePatternTerm (path : String) : MacroM Term := do
+meta def mkRoutePatternTerm (path : String) : MacroM Term := do
   let parts := path.split '/'
     |>.map toString
     |>.filter (fun s => !s.isEmpty)
@@ -89,7 +91,7 @@ Maps an uppercase method keyword (e.g. `GET`) to its `Method.` constructor name
 (e.g. `Method.get`).  Most methods just lowercase the whole keyword; two
 constructors (`baselineControl`, `versionControl`) are handled specially.
 -/
-private def resolveMethodCon (keyword : Name) : Name :=
+meta def resolveMethodCon (keyword : Name) : Name :=
   let s := keyword.toString
   if s == "BASELINECONTROL" then `Method.baselineControl
   else if s == "VERSIONCONTROL" then `Method.versionControl
@@ -99,7 +101,7 @@ private def resolveMethodCon (keyword : Name) : Name :=
 Expands a route term like `GET "/user/{id}" (⟨id⟩: Path Nat) => body` into
 a `Route` value with a precomputed pattern and handler.
 -/
-private def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
+meta def expandRouteTerm (methodName : Name) (pat : TSyntax `str)
     (bs : Array Syntax) (body : TSyntax `term) : MacroM Term := do
   let patStr := pat.getString
   let patTerm ← mkRoutePatternTerm patStr

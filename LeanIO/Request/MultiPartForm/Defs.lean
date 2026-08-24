@@ -1,8 +1,11 @@
+module
+
 import Lean
+public import Std.Http
 import Std.Async.ContextAsync
 import Std.Data.ByteSlice
-import LeanIO.Utils
-import LeanIO.Data.ChunkBuffer
+public import LeanIO.Utils
+public import LeanIO.Data.ChunkBuffer
 
 namespace LeanIO
 open Std.Http Std.Async Std.Slice
@@ -10,12 +13,12 @@ open Std.Http Std.Async Std.Slice
 /--
 Parser lifecycle state for multipart form processing.
 -/
-inductive Phase : Type where
+public inductive Phase : Type where
   | ready
   | inFile
   | done
 
-instance : Inhabited Phase where
+public instance : Inhabited Phase where
   default := .ready
 
 /--
@@ -24,7 +27,7 @@ Internal mutable state shared across the multipart parsing pipeline.
 Tracks the buffered chunk data, cursor position, precompiled boundary
 search patterns, and the underlying HTTP body stream.
 -/
-structure MultipartInner : Type where
+public structure MultipartInner : Type where
 
   /--
   Buffered chunk data that accumulates socket reads.
@@ -91,7 +94,7 @@ be streamed lazily via `stream`, `save`, `bytes`, or `discard`.
 - `contentType` — Content-Type (defaults to `text/plain` per RFC 2046 §5.1)
 - `headers` — all part headers as a `Std.Http.Headers` map
 -/
-structure FormFile where
+public structure FormFile where
   name        : String
   filename    : String
   contentType : String
@@ -102,7 +105,7 @@ structure FormFile where
 One entry in a multipart form submission: either a simple form field
 or an uploaded file.
 -/
-inductive MultipartEntry : Type where
+public inductive MultipartEntry : Type where
 
   /--
   A simple form field with `name` and its string `value`.
@@ -149,7 +152,7 @@ def router : Router :=
 | `file.bytes` | Read all chunks into a `ByteArray` (small files only) |
 | `file.discard` | Skip the body |
 -/
-structure MultiPartForm where
+public structure MultiPartForm where
 
   /--
   Shared mutable parser state.

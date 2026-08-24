@@ -1,7 +1,9 @@
-import Std.Http
-import Std.Async
-import LeanIO.Router.RoutePattern
-import LeanIO.Router.Route
+module
+
+public import Std.Http
+public import Std.Async
+public import LeanIO.Router.RoutePattern
+public import LeanIO.Router.Route
 
 namespace LeanIO.Router
 open Std Http Server
@@ -23,7 +25,7 @@ Priority: literal > param (`{param}`) > wildcard (`{*rest}`)
 
 Uses `HashMap` for handlers and `HashMap.Raw` for literals to allow recursive definition
 -/
-structure RouteTrie where
+public structure RouteTrie where
   handlers : HashMap Method HandlerFn     := ∅
   literals : HashMap.Raw String RouteTrie := ∅
   param    : Option (String × RouteTrie)  := none
@@ -32,18 +34,18 @@ structure RouteTrie where
 namespace RouteTrie
 
 /-- Empty trie with no routes. -/
-def empty : RouteTrie := {}
+public def empty : RouteTrie := {}
 
-instance : Inhabited RouteTrie := ⟨empty⟩
+public instance : Inhabited RouteTrie := ⟨empty⟩
 
-instance : EmptyCollection RouteTrie := ⟨empty⟩
+public instance : EmptyCollection RouteTrie := ⟨empty⟩
 
 /--
 Inserts a route into the trie given its method, segment list, and composed handler.
 
 Middlewares should be composed onto the handler before insertion.
 -/
-def addRoute (self : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerFn) : RouteTrie :=
+public def addRoute (self : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerFn) : RouteTrie :=
   match segs with
   | [] => { self with handlers := self.handlers.insert method handler }
   | Segment.lit s :: rest =>
@@ -60,14 +62,14 @@ def addRoute (self : RouteTrie) (method : Method) (segs : List Segment) (handler
 Adds a route from a runtime pattern string (e.g. `"/user/{id}"`).
 Useful for programmatic (non-macro) route construction.
 -/
-def addRouteFromPattern (self : RouteTrie) (method : Method) (pattern : String) (handler : HandlerFn) : RouteTrie :=
+public def addRouteFromPattern (self : RouteTrie) (method : Method) (pattern : String) (handler : HandlerFn) : RouteTrie :=
   let pat := RoutePattern.ofString pattern
   addRoute self method pat.segments handler
 
 /--
 Builds a trie from a list of `Route` values, composing route-level middlewares.
 -/
-def ofRoutes (routes : List Route) : RouteTrie :=
+public def ofRoutes (routes : List Route) : RouteTrie :=
   routes.foldl (init := empty) fun self r =>
     let h := r.middlewares.foldl (fun f mw => mw f) r.handler
     self.addRoute r.method r.pat.segments h
@@ -78,7 +80,7 @@ Looks up a handler by method and path segments. Priority: literal > param > wild
 Returns `some (capturedParams, handler)` where `capturedParams` maps param names
 to values, or `none` if no route matches.
 -/
-def lookup (self : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerFn) :=
+public def lookup (self : RouteTrie) (method : Method) (segs : List String) : Option (List (String × String) × HandlerFn) :=
   go self segs []
 where
   go (t : RouteTrie) (segs : List String) (params : List (String × String)) : Option (List (String × String) × HandlerFn) :=
@@ -127,7 +129,7 @@ Example: given a trie containing
 
 (order is deterministic but insertion-dependent, not route-priority).
 -/
-partial def fold (self : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
+public partial def fold (self : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
   foldGo f self [] init
 where
   foldGo (f : Method → List Segment → HandlerFn → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
@@ -146,7 +148,7 @@ be pre-composed onto handlers before insertion — nothing is composed here.
 
 If no route matches, returns 404.
 -/
-def dispatch (self : RouteTrie) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
+public def dispatch (self : RouteTrie) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
   let method := req.line.method
   let path := req.line.uri.path
   let segments := path.toDecodedSegments.toList
@@ -158,7 +160,7 @@ def dispatch (self : RouteTrie) (req : Request Body.Stream) : ContextAsync (Resp
     Response.notFound |>.text s!"Not Found: {method} {path}"
 
 /-- Makes `RouteTrie` usable as a `Std.Http.Server.Handler`. -/
-instance : Handler RouteTrie where
+public instance : Handler RouteTrie where
   onRequest := dispatch
 
 end LeanIO.Router.RouteTrie

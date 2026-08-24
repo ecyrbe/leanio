@@ -1,12 +1,14 @@
+module
+
 import Std.Async.ContextAsync
 import LeanIO.Router.Route
-import LeanIO.Request.FromRequestParts
-import LeanIO.Data.Headers.HeaderName
+public import LeanIO.Request.FromRequestParts
+public import LeanIO.Data.Headers.HeaderName
 
 namespace LeanIO
 open Std.Http Std.Async
 
-structure Range where
+public structure Range where
   start : Option Nat
   stop  : Option Nat
 deriving Inhabited, Repr
@@ -21,11 +23,11 @@ Supports the standard HTTP range formats:
 * `bytes=-500`   — suffix range (last N bytes)
 * `bytes=0-499,1000-` — multiple ranges (only the first with lowest start is used)
 -/
-structure HeaderRange where
+public structure HeaderRange where
   ranges : Option (Array Range)
 deriving Inhabited
 
-private def parseOne (spec : String.Slice) : Option Range := do
+public def parseOne (spec : String.Slice) : Option Range := do
     match (spec.split (· == '-')).toList with
     | [a, b] =>
       match a.trimAscii.toNat?,b.trimAscii.toNat? with
@@ -35,10 +37,10 @@ private def parseOne (spec : String.Slice) : Option Range := do
       | none,none => none
     | _ => none
 
-def parseRange (val : String) : Option (Array Range) :=
+public def parseRange (val : String) : Option (Array Range) :=
   val.trimAscii.dropPrefix? "bytes=" >>= (·.split (· == ',') |>.toArray |>.mapM parseOne)
 
-instance : FromRequestParts HeaderRange where
+public instance : FromRequestParts HeaderRange where
   from_request_parts req :=
     match req.line.headers.get? .range with
     | some range => .ok { ranges := parseRange range.value }

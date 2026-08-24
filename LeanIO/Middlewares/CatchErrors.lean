@@ -1,4 +1,8 @@
-import LeanIO.Router
+module
+
+public import Std.Http.Data.Response
+public import Std.Async.ContextAsync
+public import LeanIO.Router
 
 namespace LeanIO.Middlewares
 open LeanIO Router
@@ -23,7 +27,7 @@ Example:
     Response.serviceUnavailable |>.empty
 ```
 -/
-def catchErrors
+public def catchErrors
     (onError : IO.Error → ContextAsync (Response Body.Any) := fun _ => Response.internalServerError |>.empty):
     Middleware := fun next req => do
   try

@@ -1,6 +1,8 @@
-import Lean.Elab.Deriving.Basic
-import Lean.Elab.Deriving.Util
-import Lean.Meta.Inductive
+module
+
+meta import Lean.Elab.Deriving.Basic
+meta import Lean.Elab.Deriving.Util
+meta import Lean.Meta.Inductive
 import LeanIO.Request.Form
 import LeanIO.Request.FromRequestParts
 
@@ -8,7 +10,7 @@ namespace LeanIO
 
 open Lean Elab Meta Command Deriving
 
-private def mkFromFormBody (indVal : InductiveVal) : TermElabM Term := do
+meta def mkFromFormBody (indVal : InductiveVal) : TermElabM Term := do
   let env ← getEnv
   let fields := getStructureFields env indVal.name
   let ctorVal ← getConstInfoCtor indVal.ctors.head!
@@ -61,7 +63,7 @@ private def mkFromFormBody (indVal : InductiveVal) : TermElabM Term := do
       $[$stmts:doElem]*
       $result:term)
 
-private def mkFromFormInstanceCmd (declName : Name) : TermElabM Command := do
+meta def mkFromFormInstanceCmd (declName : Name) : TermElabM Command := do
   let indVal ← getConstInfoInduct declName
   let argNames ← mkInductArgNames indVal
   let binders ← mkImplicitBinders argNames
@@ -85,13 +87,13 @@ structure LoginForm where
   password : String
 deriving FromForm
 
-def login := POST "/login" (⟨form⟩ : FormOf LoginForm) => do
+meta def login := POST "/login" (⟨form⟩ : FormOf LoginForm) => do
   let user := form.username
   let pass := form.password
   ...
 ```
 -/
-def mkFromFormInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
+meta def mkFromFormInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
   if (← declNames.allM isInductive) && declNames.size > 0 then
     for declName in declNames do
       if isStructure (← getEnv) declName then
@@ -101,7 +103,7 @@ def mkFromFormInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
   else
     return false
 
-initialize
+meta initialize
   registerDerivingHandler ``FromForm mkFromFormInstanceHandler
 
 end LeanIO

@@ -1,4 +1,6 @@
-import LeanIO.Utils
+module
+
+meta import LeanIO.Utils
 open LeanIO.Utils
 
 -- standard padded

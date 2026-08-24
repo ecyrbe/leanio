@@ -1,8 +1,10 @@
+module
+
 import Std.Async.ContextAsync
-import LeanIO.Router.Route
-import LeanIO.Request.FromRequestParts
-import LeanIO.Request.FromRequestBody
-import LeanIO.Response.IntoResponse
+public import LeanIO.Router.Route
+public import LeanIO.Request.FromRequestParts
+public import LeanIO.Request.FromRequestBody
+public import LeanIO.Response.IntoResponse
 
 namespace LeanIO
 open Std.Http Std.Async
@@ -41,37 +43,37 @@ PUT "/todos/{id}" (body : Json UpdateTodoRequest) (id : Path Nat) => do
 -- only 1 body allowed, it must be the first parameter
 ```
 -/
-class Extractor (Fn : Type) where
+public class Extractor (Fn : Type) where
   extract : Fn → Router.HandlerFn
 
-private class PartsExtractor (Fn : Type) where
+public class PartsExtractor (Fn : Type) where
   extractParts : Fn → Router.HandlerFn
 
-instance [IntoResponse R] : Extractor (ContextAsync R) where
+public instance [IntoResponse R] : Extractor (ContextAsync R) where
   extract handler _ := IntoResponse.into_response handler
 
-instance [IntoResponseExt R] : Extractor (ContextAsync R) where
+public instance [IntoResponseExt R] : Extractor (ContextAsync R) where
   extract handler req := IntoResponseExt.into_response_ext req handler
 
-instance [IntoResponse R] : Extractor (Unit → R) where
+public instance [IntoResponse R] : Extractor (Unit → R) where
   extract handler _ := IntoResponse.into_response <| pure (handler ())
 
-instance [IntoResponseExt R] : Extractor (Unit → R) where
+public instance [IntoResponseExt R] : Extractor (Unit → R) where
   extract handler req := IntoResponseExt.into_response_ext req <| pure (handler ())
 
-instance [IntoResponse R] : Extractor (Unit → ContextAsync R) where
+public instance [IntoResponse R] : Extractor (Unit → ContextAsync R) where
   extract handler _ := IntoResponse.into_response (handler ())
 
-instance [IntoResponseExt R] : Extractor (Unit → ContextAsync R) where
+public instance [IntoResponseExt R] : Extractor (Unit → ContextAsync R) where
   extract handler req := IntoResponseExt.into_response_ext req (handler ())
 
-instance [FromRequestBody P] [PartsExtractor Rest] : Extractor (P → Rest) where
+public instance [FromRequestBody P] [PartsExtractor Rest] : Extractor (P → Rest) where
   extract handler req := do
     match ← FromRequestBody.from_request_body (α:=P) req with
     | .ok p => PartsExtractor.extractParts (handler p) req
     | .error e => Response.new |>.status e.toStatus |>.text (toString e)
 
-instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) where
+public instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) where
   extract handler req := do
     match FromRequestParts.from_request_parts (α:=P) req with
     | .ok p => PartsExtractor.extractParts (handler p) req
@@ -79,13 +81,13 @@ instance [FromRequestParts P] [PartsExtractor Rest] : Extractor (P → Rest) whe
 
 -- PartsAdapter: body already consumed. Only FromRequestParts allowed.
 
-private instance [IntoResponse R] : PartsExtractor (ContextAsync R) where
+public instance [IntoResponse R] : PartsExtractor (ContextAsync R) where
   extractParts handler _ := IntoResponse.into_response handler
 
-private instance [IntoResponseExt R] : PartsExtractor (ContextAsync R) where
+public instance [IntoResponseExt R] : PartsExtractor (ContextAsync R) where
   extractParts handler req := IntoResponseExt.into_response_ext req handler
 
-private instance [FromRequestParts P] [PartsExtractor Rest] : PartsExtractor (P → Rest) where
+public instance [FromRequestParts P] [PartsExtractor Rest] : PartsExtractor (P → Rest) where
   extractParts handler req := do
     match FromRequestParts.from_request_parts (α:=P) req with
     | .ok p => PartsExtractor.extractParts (handler p) req

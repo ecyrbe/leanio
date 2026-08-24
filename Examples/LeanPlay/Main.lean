@@ -1,3 +1,5 @@
+module
+
 import LeanIO
 open Std Async
 open Std Http Server
@@ -70,7 +72,7 @@ def serveStatic := GET "/{*rest}" (⟨_⟩ : Path String) (p : URI.Path) => do
   let decoded := String.intercalate "/" (p.toDecodedSegments.toList)
   return { path := staticDir / decoded : RangeFile }
 
-def main : IO Unit := Async.block do
+public def main : IO Unit := Async.block do
   let apiRouter : Router := Router.empty
     |>.addRoute listVideos
     |>.addRoute getComments

@@ -1,3 +1,5 @@
+module
+
 import LeanIO
 open Std Async
 open Std Http Server
@@ -17,7 +19,7 @@ def index := GET "/" => do
 def serveStatic := GET "/{*rest}" (⟨rest⟩ : Path String) => do
     return { path := staticDir / rest : File }
 
-def main : IO Unit := Async.block do
+public def main : IO Unit := Async.block do
   let router : Router := Router.empty
     |>.addRoute whoami
     |>.addRoute index

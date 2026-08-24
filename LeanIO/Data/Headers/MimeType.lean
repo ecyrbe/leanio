@@ -1,10 +1,12 @@
-import Std.Http
+module
+
+public import Std.Http
 import LeanIO.Data.String
 
 namespace LeanIO.MimeType
 open Std.Http
 
-inductive TopLevel
+public inductive TopLevel
   | application
   | audio
   | font
@@ -16,7 +18,7 @@ inductive TopLevel
   | text
   | video
 
-instance : ToString TopLevel where
+public instance : ToString TopLevel where
   toString lvl := match lvl with
   | .application => "application"
   | .audio => "audio"
@@ -30,37 +32,37 @@ instance : ToString TopLevel where
   | .video => "video"
 
 
-def octetStream    := Header.Value.mk "application/octet-stream"
-def textPlain      := Header.Value.mk "text/plain"
-def textHtml       := Header.Value.mk "text/html"
-def textCss        := Header.Value.mk "text/css"
-def textMarkdown   := Header.Value.mk "text/markdown"
-def textJavascript := Header.Value.mk "text/javascript"
-def imagePng       := Header.Value.mk "image/png"
-def imageJpeg      := Header.Value.mk "image/jpeg"
-def imageGif       := Header.Value.mk "image/gif"
-def imageSvg       := Header.Value.mk "image/svg+xml"
-def imageWebp      := Header.Value.mk "image/webp"
-def imageIcon      := Header.Value.mk "image/x-icon"
-def videoMp4       := Header.Value.mk "video/mp4"
-def videoWebm      := Header.Value.mk "video/webm"
-def videoOgg       := Header.Value.mk "video/ogg"
-def videoQuicktime := Header.Value.mk "video/quicktime"
-def videoAvi       := Header.Value.mk "video/x-msvideo"
-def videoMkv       := Header.Value.mk "video/x-matroska"
-def audioMpeg      := Header.Value.mk "audio/mpeg"
-def audioWav       := Header.Value.mk "audio/wav"
-def audioFlac      := Header.Value.mk "audio/flac"
-def formUrlEncoded := Header.Value.mk "application/x-www-form-urlencoded"
-def multipartForm  := Header.Value.mk "multipart/form-data"
-def applicationJs  := Header.Value.mk "application/javascript"
-def applicationJson:= Header.Value.mk "application/json"
-def applicationPdf := Header.Value.mk "application/pdf"
-def applicationZip := Header.Value.mk "application/zip"
+public def octetStream    := Header.Value.mk "application/octet-stream"
+public def textPlain      := Header.Value.mk "text/plain"
+public def textHtml       := Header.Value.mk "text/html"
+public def textCss        := Header.Value.mk "text/css"
+public def textMarkdown   := Header.Value.mk "text/markdown"
+public def textJavascript := Header.Value.mk "text/javascript"
+public def imagePng       := Header.Value.mk "image/png"
+public def imageJpeg      := Header.Value.mk "image/jpeg"
+public def imageGif       := Header.Value.mk "image/gif"
+public def imageSvg       := Header.Value.mk "image/svg+xml"
+public def imageWebp      := Header.Value.mk "image/webp"
+public def imageIcon      := Header.Value.mk "image/x-icon"
+public def videoMp4       := Header.Value.mk "video/mp4"
+public def videoWebm      := Header.Value.mk "video/webm"
+public def videoOgg       := Header.Value.mk "video/ogg"
+public def videoQuicktime := Header.Value.mk "video/quicktime"
+public def videoAvi       := Header.Value.mk "video/x-msvideo"
+public def videoMkv       := Header.Value.mk "video/x-matroska"
+public def audioMpeg      := Header.Value.mk "audio/mpeg"
+public def audioWav       := Header.Value.mk "audio/wav"
+public def audioFlac      := Header.Value.mk "audio/flac"
+public def formUrlEncoded := Header.Value.mk "application/x-www-form-urlencoded"
+public def multipartForm  := Header.Value.mk "multipart/form-data"
+public def applicationJs  := Header.Value.mk "application/javascript"
+public def applicationJson:= Header.Value.mk "application/json"
+public def applicationPdf := Header.Value.mk "application/pdf"
+public def applicationZip := Header.Value.mk "application/zip"
 
 /-- Map a MIME type string to a file extension. Returns `bin` if unknown.
     Strips parameters (everything after `;`) before matching. -/
-def extForMime (mime : String) : String :=
+public def extForMime (mime : String) : String :=
   let mime := match mime.splitOnce ';' with
     | some (base, _) => base.trimAscii
     | none => mime.trimAscii
@@ -93,7 +95,7 @@ def extForMime (mime : String) : String :=
   | "application/x-www-form-urlencoded" => "txt"
   | _ => "bin"
 
-def mimeType (path : System.FilePath) : Header.Value :=
+public def mimeType (path : System.FilePath) : Header.Value :=
   match path.extension with
   | "mp4"  => MimeType.videoMp4
   | "webm" => MimeType.videoWebm
@@ -122,12 +124,12 @@ end LeanIO.MimeType
 
 namespace Std.Http.Headers
 
-def hasMimeType (self : Headers) (mimeType : Header.Value) : Bool :=
+public def hasMimeType (self : Headers) (mimeType : Header.Value) : Bool :=
   match self.get? .contentType with
   |some contentType => contentType.value.startsWith mimeType.value
   |none => false
 
-def hasMimeTopLevel (self : Headers) (level: LeanIO.MimeType.TopLevel): Bool :=
+public def hasMimeTopLevel (self : Headers) (level: LeanIO.MimeType.TopLevel): Bool :=
   match self.get? .contentType with
   |some contentType => contentType.value.startsWith s!"{level}/"
   |none => false
@@ -137,10 +139,10 @@ end Std.Http.Headers
 namespace LeanIO.MimeType
 open Std.Http
 
-class HasMimeTypes (α : Type) where
+public class HasMimeTypes (α : Type) where
   mimes? : Option (List Header.Value)
 
-def checkMimeTypes (t: Type) [HasMimeTypes t] (headers: Headers): Except String Unit := do
+public def checkMimeTypes (t: Type) [HasMimeTypes t] (headers: Headers): Except String Unit := do
   match HasMimeTypes.mimes? t with
   | some mimes =>
     if mimes.any fun mime => headers.hasMimeType mime then

@@ -1,8 +1,10 @@
-import Std.Http
-import Std.Async
+module
+
+public import Std.Http
+public import Std.Async
 import LeanIO.Router.RoutePattern
-import LeanIO.Router.Route
-import LeanIO.Router.RouteTrie
+public import LeanIO.Router.Route
+public import LeanIO.Router.RouteTrie
 
 namespace LeanIO.Router
 open Std Http Server
@@ -16,19 +18,19 @@ an array of middlewares. Nothing is composed at registration time.
 `RouteTrie` once, pre-composing all middlewares onto the handlers, so request
 dispatch is a single O(depth) trie lookup with zero per-request composition.
 -/
-structure Router where
+public structure Router where
   routers     : Array (String × Router) := #[]
   routes      : Array Route := #[]
   middlewares : Array Middleware := #[]
 
 /-- Creates an empty router with no routes, sub-routers or middlewares. -/
-def Router.empty : Router := {}
+public def Router.empty : Router := {}
 
 /--
 Applies an array of middlewares to a handler using left fold.
 Used internally by `Router.toRouteTrie`.
 -/
-private def applyMiddlewares (ms : Array Middleware) : Middleware :=
+public def applyMiddlewares (ms : Array Middleware) : Middleware :=
   ms.foldl (fun h mw => mw h)
 
 /--
@@ -36,7 +38,7 @@ Adds a single route to the router.
 
 For an identical method and pattern, the **first** registration wins.
 -/
-def Router.addRoute (route : Route) (self : Router) : Router :=
+public def Router.addRoute (route : Route) (self : Router) : Router :=
   { self with routes := self.routes.push route }
 
 /--
@@ -50,7 +52,7 @@ prepended to their patterns and `sub`'s middlewares composed onto their handlers
 Router.empty |>.addRouter "/api/v1" todosRouter
 ```
 -/
-def Router.addRouter (self : Router) (pre : String) (sub : Router) : Router :=
+public def Router.addRouter (self : Router) (pre : String) (sub : Router) : Router :=
   { self with routers := self.routers.push (pre, sub) }
 
 /--
@@ -66,7 +68,7 @@ Example:
     |>.addMiddleware catchErrors
 ```
 -/
-def Router.addMiddleware (mw : Middleware) (self : Router) : Router :=
+public def Router.addMiddleware (mw : Middleware) (self : Router) : Router :=
   { self with middlewares := self.middlewares.push mw }
 
 /--
@@ -80,7 +82,7 @@ wrap around, and the outermost router's middlewares run first.
 Own routes are inserted before sub-router routes; sub-router patterns get the
 mount prefix prepended. All composition happens here, once — never at dispatch.
 -/
-partial def Router.toRouteTrie (self : Router) : RouteTrie :=
+public partial def Router.toRouteTrie (self : Router) : RouteTrie :=
   let wrap := applyMiddlewares self.middlewares
   let trie := self.routes.foldr (fun route acc =>
     let h := applyMiddlewares route.middlewares route.handler
@@ -94,7 +96,7 @@ partial def Router.toRouteTrie (self : Router) : RouteTrie :=
   ) trie
 
 
-instance : Coe Router RouteTrie where
+public instance : Coe Router RouteTrie where
   coe := Router.toRouteTrie
 
 /--
@@ -108,7 +110,7 @@ let server ← router.serve addr
 server.waitShutdown
 ```
 -/
-def Router.serve (self : Router) (addr : Net.SocketAddress)
+public def Router.serve (self : Router) (addr : Net.SocketAddress)
     (config : Config := {}) (backlog : UInt32 := 1024) : Async Server :=
   Server.serve addr self.toRouteTrie config backlog
 
