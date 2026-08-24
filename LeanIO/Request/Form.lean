@@ -1,6 +1,5 @@
 module
 
-import Lean
 import Std.Async.ContextAsync
 public import Std.Internal.Parsec.ByteArray
 public import LeanIO.Request.FromRequestBody

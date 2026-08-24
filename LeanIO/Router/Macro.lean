@@ -1,6 +1,6 @@
 module
 
-public meta import Lean
+public meta import Lean.Elab.Command
 import Std.Http
 import LeanIO.Router.RoutePattern
 import LeanIO.Router.Route

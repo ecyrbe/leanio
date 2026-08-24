@@ -12,3 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: leanprover/lean-action@v1
+
+      # Belt and braces: FrontendGuard reasons about imports, so it would miss a leak
+      # arriving by some other route. Assert the end product directly.
+      - name: Example binaries stay small
+        run: |
+          lake build todos leanplay upload sumtest whoami
+          status=0
+          for bin in .lake/build/bin/*; do
+            case "$bin" in *.hash|*.rsp|*.trace) continue;; esac
+            size=$(stat -c%s "$bin")
+            printf '%s: %s bytes\n' "$bin" "$size"
+            if [ "$size" -gt 20000000 ]; then
+              echo "::error::$bin is $size bytes (>20 MB) — the compiler frontend is probably linked in."
+              status=1
+            fi
+          done
+          exit $status

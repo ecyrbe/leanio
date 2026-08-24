@@ -1091,6 +1091,21 @@ lake build
 lake test
 ```
 
+### 7.4 Binary size
+
+LeanIO keeps the Lean compiler frontend out of a client's runtime closure. Linked example
+binaries come out around 6 MB; if the frontend leaks in they jump to roughly 126 MB, which
+on a serverless platform turns a ~2 s cold start into ~15 s.
+
+Two things keep that true:
+
+- JSON goes through [`lean-json`](https://github.com/paulbutcher/lean-json), not
+  `Lean.Data.Json`.
+- Anything from `Lean.*` is imported as `meta import`
+
+[`FrontendGuard.lean`](./FrontendGuard.lean) is a default build target that walks the
+transitive import closure and fails the build if anything reaches `Lean.*` without `meta`.
+
 ---
 
 ## License

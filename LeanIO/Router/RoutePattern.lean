@@ -1,7 +1,5 @@
 module
 
-import Lean
-
 namespace LeanIO.Router
 
 /--

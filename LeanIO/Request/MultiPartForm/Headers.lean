@@ -1,6 +1,5 @@
 module
 
-import Lean
 import LeanIO.Utils
 import LeanIO.Data.ChunkBuffer
 import LeanIO.Data.String

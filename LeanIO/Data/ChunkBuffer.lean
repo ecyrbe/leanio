@@ -1,7 +1,6 @@
 module
 
 public import Std.Data.ByteSlice
-import Lean
 public import LeanIO.Utils
 
 namespace Std.Slice

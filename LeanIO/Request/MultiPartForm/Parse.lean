@@ -1,6 +1,6 @@
 module
 
-public meta import Lean
+public meta import Lean.Elab.Command
 public meta import LeanIO.Data.ChunkBuffer
 public meta import LeanIO.Utils
 public import Std.Http.Data.Headers

@@ -1,6 +1,5 @@
 module
 
-import Lean
 public import Std.Http
 import Std.Async.ContextAsync
 import Std.Data.ByteSlice

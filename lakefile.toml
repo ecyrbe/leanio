@@ -1,6 +1,6 @@
 name = "leanio"
 version = "0.6.0"
-defaultTargets = ["LeanIO"]
+defaultTargets = ["LeanIO", "FrontendGuard"]
 testDriver = "Tests"
 
 [[require]]
@@ -44,3 +44,6 @@ globs = ["Tests.+"]
 name = "sumtest"
 root = "SumServer"
 srcDir = "Examples"
+
+[[lean_lib]]
+name = "FrontendGuard"
