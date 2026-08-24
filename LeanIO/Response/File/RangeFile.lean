@@ -1,16 +1,18 @@
+module
+
 import Std.Async.ContextAsync
-import LeanIO.Response.Common
-import LeanIO.Response.IntoResponse
-import LeanIO.Response.File.Utils
-import LeanIO.Request.HeaderRange
-import LeanIO.Data.Headers.MimeType
+public import LeanIO.Response.Common
+public import LeanIO.Response.IntoResponse
+public import LeanIO.Response.File.Utils
+public import LeanIO.Request.HeaderRange
+public import LeanIO.Data.Headers.MimeType
 import LeanIO.Data.Headers.HeaderName
-import LeanIO.Data.Headers.CacheControl
+public import LeanIO.Data.Headers.CacheControl
 
 namespace LeanIO
 open Std.Http Std.Async
 
-private def headerBytes : Header.Value := Header.Value.mk "bytes"
+public def headerBytes : Header.Value := Header.Value.mk "bytes"
 
 /--
 A file on disk served with optional `Range` support for efficient seeking.
@@ -26,13 +28,13 @@ def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
   return { path := "static" / rest : RangeFile }
 ```
 -/
-structure RangeFile where
+public structure RangeFile where
   new ::
   path         : System.FilePath
   cacheControl : Option CacheControl := some <| .publicStatic 0
 deriving Inhabited
 
-private def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (Nat × Nat) :=
+public def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (Nat × Nat) :=
   match ranges with
   | none => none
   | some rs =>
@@ -53,7 +55,7 @@ private def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option 
       some (start, len)
     else none
 
-instance : IntoResponseExt RangeFile where
+public instance : IntoResponseExt RangeFile where
   into_response_ext req f := do
     let file ← f
     if !(←file.path.pathExists) || (←file.path.isDir) then

@@ -1,12 +1,17 @@
-import LeanIO.Router
+module
+
+public import Std.Http.Data.Request
+public import Std.Http.Data.Headers.Value
+public import Std.Async.Basic
+public import LeanIO.Router
 import LeanIO.Utils
-import LeanIO.Data.Redacted
+public import LeanIO.Data.Redacted
 import LeanIO.Data.Headers.HeaderName
 
 namespace Std.Http.Header.Value
 
-def basicUnauthorized: Header.Value := mk "Basic realm=\"Restricted Area\""
-def bearerUnauthorized: Header.Value := mk "Bearer realm=\"Restricted Area\""
+public def basicUnauthorized: Header.Value := mk "Basic realm=\"Restricted Area\""
+public def bearerUnauthorized: Header.Value := mk "Bearer realm=\"Restricted Area\""
 
 end Std.Http.Header.Value
 
@@ -15,10 +20,10 @@ open LeanIO Router Utils
 open Std Http Server
 open Std.Async
 
-def extractAuthorization (request: Request α): Option String :=
+public def extractAuthorization (request: Request α): Option String :=
   request.line.headers.get? .authorization |>.map (·.value)
 
-inductive AuthConfig where
+public inductive AuthConfig where
 | basic (validate: String → Redacted → Async Bool)
 | bearer (validate: Redacted → Async Bool)
 
@@ -31,7 +36,7 @@ Example:
   router.addMiddleware <| auth (.basic fun user pwd => pure true)
 ```
 -/
-def auth (config: AuthConfig) : Middleware := fun next req => do
+public def auth (config: AuthConfig) : Middleware := fun next req => do
   let some headerAuth := extractAuthorization req |
     match config with
     | .basic _ =>  Response.unauthorized |>.header .wwwAuthenticate .basicUnauthorized  |>.empty

@@ -1,7 +1,10 @@
-import Std.Async.ContextAsync
+module
+
+public import Std.Async.ContextAsync
 import Std.Data.ByteSlice
-import LeanIO.Data.ChunkBuffer
-import LeanIO.Request.MultiPartForm.Defs
+public import LeanIO.Utils
+public import LeanIO.Data.ChunkBuffer
+public import LeanIO.Request.MultiPartForm.Defs
 import LeanIO.Request.MultiPartForm.Headers
 
 namespace LeanIO
@@ -9,11 +12,11 @@ open Std.Http Std.Async Std.Slice
 
 /-- Emit each slice of `body` to `cb`, converting via `toByteArrayFast`. -/
 @[inline]
-def emitChunks (body : ChunkBuffer) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
+public def emitChunks (body : ChunkBuffer) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
     for chunk in body.chunks do
       cb chunk.toByteArrayFast
 
-def readMore (inner : IO.Ref MultipartInner) : ContextAsync Bool := do
+public def readMore (inner : IO.Ref MultipartInner) : ContextAsync Bool := do
   let st ← inner.get
   if st.pos ≥ 65536 then
     inner.modify fun s => { s with cb := st.cb.extract st.pos st.cb.size, pos := 0 }
@@ -24,7 +27,7 @@ def readMore (inner : IO.Ref MultipartInner) : ContextAsync Bool := do
     inner.modify fun s => { s with cb := s.cb.add chunk.data }
     return true
 
-partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : Search ChunkBuffer) (startPos : Nat) : ContextAsync (ChunkBuffer × Nat) := do
+public partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : Search ChunkBuffer) (startPos : Nat) : ContextAsync (ChunkBuffer × Nat) := do
   let st ← inner.get
   match st.cb.searchSafe delimSearch st.pos with
   | .found dpos =>
@@ -44,12 +47,12 @@ partial def readUntilGo (inner : IO.Ref MultipartInner) (delimSearch : Search Ch
       inner.modify fun s => { s with pos := total }
       return (body, total)
 
-def readUntil (inner : IO.Ref MultipartInner) (delimSearch : Search ChunkBuffer) : ContextAsync ByteArray := do
+public def readUntil (inner : IO.Ref MultipartInner) (delimSearch : Search ChunkBuffer) : ContextAsync ByteArray := do
   let st ← inner.get
   let (body, _) ← readUntilGo inner delimSearch st.pos
   return body.toByteArray
 
-partial def skip (inner : IO.Ref MultipartInner) (pref : ByteArray) : ContextAsync Unit := do
+public partial def skip (inner : IO.Ref MultipartInner) (pref : ByteArray) : ContextAsync Unit := do
   let st ← inner.get
   if st.cb.startsWithAt st.pos pref then
     inner.modify fun s => { s with pos := s.pos + pref.size }
@@ -59,7 +62,7 @@ partial def skip (inner : IO.Ref MultipartInner) (pref : ByteArray) : ContextAsy
 
 /-- Split `dataCB` at `boundSearch`. If found: emit body slices, store rest. Otherwise:
     emit safe portion and pass tail/remainder to `k`. -/
-def emitBoundary (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuffer)
+public def emitBoundary (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuffer)
     (dataCB : ChunkBuffer) (cb : ByteArray → ContextAsync Unit)
     (k : ChunkBuffer → ContextAsync Unit) : ContextAsync Unit := do
   let dataLen := dataCB.size
@@ -75,7 +78,7 @@ def emitBoundary (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuff
     k dataCB
 
 /-- Stream raw chunks from the stream. No buffering in ChunkBuffer. -/
-partial def streamRaw (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuffer)
+public partial def streamRaw (inner : IO.Ref MultipartInner) (boundSearch : Search ChunkBuffer)
     (cb : ByteArray → ContextAsync Unit) (carry : ChunkBuffer) : ContextAsync Unit := do
   let st ← inner.get
   let chunkOpt ← st.stream.recv
@@ -94,7 +97,7 @@ partial def streamRaw (inner : IO.Ref MultipartInner) (boundSearch : Search Chun
       else
         streamRaw inner boundSearch cb rest
 
-def startStreamFile (f : FormFile) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
+public def startStreamFile (f : FormFile) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
   let st ← f.inner.get
   f.inner.set { st with cb := ChunkBuffer.empty, pos := 0 }
   streamRaw f.inner st.boundSepSearch cb (st.cb.extract st.pos st.cb.size)

@@ -1,3 +1,5 @@
+module
+
 import LeanIO
 open Std Async
 open Std Http Server
@@ -237,7 +239,7 @@ def rootRouter : Router := Router.empty
 -- Entry point
 -- ==========================================
 
-def main : IO Unit := Async.block do
+public def main : IO Unit := Async.block do
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8080⟩
   let router := rootRouter
     |>.addMiddleware (← todoMiddleware)

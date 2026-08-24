@@ -1,11 +1,13 @@
+module
+
 import Std.Async.ContextAsync
-import LeanIO.Response.Common
-import LeanIO.Response.IntoResponse
+public import LeanIO.Response.Common
+public import LeanIO.Response.IntoResponse
 import LeanIO.Request.HeaderRange
-import LeanIO.Data.Headers.HeaderName
-import LeanIO.Data.Headers.MimeType
-import LeanIO.Response.File.Utils
-import LeanIO.Data.Headers.CacheControl
+public import LeanIO.Data.Headers.HeaderName
+public import LeanIO.Data.Headers.MimeType
+public import LeanIO.Response.File.Utils
+public import LeanIO.Data.Headers.CacheControl
 
 
 namespace LeanIO
@@ -22,13 +24,13 @@ def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
   return { path := "static" / rest : File }
 ```
 -/
-structure File where
+public structure File where
   new ::
   path         : System.FilePath
   cacheControl : Option CacheControl := some <|.publicStatic 0
 deriving Inhabited
 
-instance : IntoResponseExt File where
+public instance : IntoResponseExt File where
   into_response_ext req f := do
     let file ← f
     if !(←file.path.pathExists) || (←file.path.isDir) then

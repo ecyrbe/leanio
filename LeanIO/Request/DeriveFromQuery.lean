@@ -1,13 +1,15 @@
-import Lean.Elab.Deriving.Basic
-import Lean.Elab.Deriving.Util
-import Lean.Meta.Inductive
+module
+
+meta import Lean.Elab.Deriving.Basic
+meta import Lean.Elab.Deriving.Util
+meta import Lean.Meta.Inductive
 import LeanIO.Request.FromRequestParts
 
 namespace LeanIO
 
 open Lean Elab Meta Command Deriving
 
-private def mkFromQueryBody (indVal : InductiveVal) : TermElabM Term := do
+meta def mkFromQueryBody (indVal : InductiveVal) : TermElabM Term := do
   let env ← getEnv
   let fields := getStructureFields env indVal.name
   let ctorVal ← getConstInfoCtor indVal.ctors.head!
@@ -60,7 +62,7 @@ private def mkFromQueryBody (indVal : InductiveVal) : TermElabM Term := do
       $[$stmts:doElem]*
       $result:term)
 
-private def mkFromQueryInstanceCmd (declName : Name) : TermElabM Command := do
+meta def mkFromQueryInstanceCmd (declName : Name) : TermElabM Command := do
   let indVal ← getConstInfoInduct declName
   let argNames ← mkInductArgNames indVal
   let binders ← mkImplicitBinders argNames
@@ -85,7 +87,7 @@ structure Pagination where
 deriving FromQuery
 ```
 -/
-def mkFromQueryInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
+meta def mkFromQueryInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
   if (← declNames.allM isInductive) && declNames.size > 0 then
     for declName in declNames do
       if isStructure (← getEnv) declName then
@@ -95,7 +97,7 @@ def mkFromQueryInstanceHandler (declNames : Array Name) : CommandElabM Bool := d
   else
     return false
 
-initialize
+meta initialize
   registerDerivingHandler ``FromQuery mkFromQueryInstanceHandler
 
 end LeanIO

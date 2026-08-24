@@ -1,4 +1,7 @@
+module
+
 import LeanIO.Router.RouteTrie
+meta import LeanIO.Router.RouteTrie
 open LeanIO.Router
 open Std Http Server
 open Std.Async

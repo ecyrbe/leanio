@@ -1,39 +1,41 @@
-import Lean
-import Std.Async.ContextAsync
-import LeanIO.Data.Headers.MimeType
+module
+
+public import Lean
+public import Std.Async.ContextAsync
+public import LeanIO.Data.Headers.MimeType
 
 namespace LeanIO
 open Std.Http Std.Async Lean MimeType
 
-inductive FromRequestBodyError where
+public inductive FromRequestBodyError where
 | bad_media_error (msg: String) -- 415 unsupported media type
 | syntax_error (msg: String) -- 400 bad request
 | semantic_error (msg: String) -- 422 unprocessable entity
 | io_error (e: IO.Error) -- 500 internal server error
 
-def FromRequestBodyError.toStatus : FromRequestBodyError → Status
+public def FromRequestBodyError.toStatus : FromRequestBodyError → Status
   | .bad_media_error _ => Status.unsupportedMediaType
   | .syntax_error _ => Status.badRequest
   | .semantic_error _ => Status.unprocessableEntity
   | .io_error _ => Status.internalServerError
 
-instance : ToString FromRequestBodyError where
+public instance : ToString FromRequestBodyError where
   toString
   | .bad_media_error msg => msg
   | .syntax_error msg => msg
   | .semantic_error msg => msg
   | .io_error e => e.toString
 
-class FromRequestBody (α : Type) where
+public class FromRequestBody (α : Type) where
   from_request_body : Request Body.Stream → ContextAsync (Except FromRequestBodyError α)
 
-structure Json (α: Type) where
+public structure Json (α: Type) where
   body: α
 
-instance: HasMimeTypes (Json α) where
+public instance: HasMimeTypes (Json α) where
   mimes? := some [MimeType.applicationJson]
 
-instance [FromJson α] : FromRequestBody (Json α) where
+public instance [FromJson α] : FromRequestBody (Json α) where
   from_request_body req := do
     match checkMimeTypes (Json α) req.line.headers with
     | .error e => return .error (.bad_media_error e)
@@ -48,13 +50,13 @@ instance [FromJson α] : FromRequestBody (Json α) where
         | .error e => return .error (.syntax_error e)
       catch e => return .error (.io_error e)
 
-structure PlainText where
+public structure PlainText where
   body: String
 
-instance : HasMimeTypes PlainText where
+public instance : HasMimeTypes PlainText where
   mimes? := some [MimeType.textPlain]
 
-instance : FromRequestBody PlainText where
+public instance : FromRequestBody PlainText where
   from_request_body req := do
     match checkMimeTypes PlainText req.line.headers with
     | .error e => return .error (.bad_media_error e)
@@ -64,7 +66,7 @@ instance : FromRequestBody PlainText where
         return .ok {body}
       catch e => return .error (.io_error e)
 
-instance[FromRequestBody α] [HasMimeTypes α] [FromRequestBody β] [HasMimeTypes β]: FromRequestBody (α ⊕ β) where
+public instance[FromRequestBody α] [HasMimeTypes α] [FromRequestBody β] [HasMimeTypes β]: FromRequestBody (α ⊕ β) where
   from_request_body req := do
     match checkMimeTypes α req.line.headers with
     | .ok _ =>

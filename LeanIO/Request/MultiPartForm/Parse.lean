@@ -1,6 +1,12 @@
-import Std.Async.ContextAsync
+module
+
+public meta import Lean
+public meta import LeanIO.Data.ChunkBuffer
+public meta import LeanIO.Utils
+public import Std.Http.Data.Headers
+public import Std.Async.ContextAsync
 import LeanIO.Data.Headers.MimeType
-import LeanIO.Request.MultiPartForm.Defs
+public import LeanIO.Request.MultiPartForm.Defs
 import LeanIO.Request.MultiPartForm.Headers
 import LeanIO.Request.MultiPartForm.Stream
 
@@ -29,24 +35,24 @@ elab "kmp! " t:str : term => do
       let stx ← `(Search.mk (α := ChunkBuffer) (ChunkBuffer.ofByteArray ($(quote s) : String).toUTF8) #[$[$lpsNums],*])
       elabTerm stx none
 
-abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
-abbrev crlf : ByteArray := "\r\n".toUTF8
-abbrev endMarker : ByteArray := "--\r\n".toUTF8
+public abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
+public abbrev crlf : ByteArray := "\r\n".toUTF8
+public abbrev endMarker : ByteArray := "--\r\n".toUTF8
 
 /-- Build a generated filename: `{name}{counter}.{ext}`. -/
-def generatedFilename (name : String) (counter : Nat) (mime : String) : String :=
+public def generatedFilename (name : String) (counter : Nat) (mime : String) : String :=
   s!"{name}{counter}.{extForMime mime}"
 
 
 /-- Transition to `.inFile` and return a file entry. -/
 @[inline]
-private def fileEntry (inner : IO.Ref MultipartInner) (name fn : String) (contentType : String) (hds : Headers) : ContextAsync MultipartEntry := do
+public def fileEntry (inner : IO.Ref MultipartInner) (name fn : String) (contentType : String) (hds : Headers) : ContextAsync MultipartEntry := do
   inner.modify fun s => { s with phase := .inFile }
   return .file { name, filename := fn, contentType, headers := hds, inner }
 
 /-- Transition to `.done` and stop. -/
 @[inline]
-private def stop (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
+public def stop (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
   inner.modify fun s => { s with phase := .done }
   return none
 
@@ -58,7 +64,7 @@ Parse the next multipart entry from the stream.
 3. Parse headers
 4. text/* without filename → field; otherwise → file
 -/
-def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
+public def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
   let st ← inner.get
   if st.pos = 0 && st.cb.size = 0 then
     skip inner st.boundStart

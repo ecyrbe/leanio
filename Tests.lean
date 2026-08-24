@@ -1,3 +1,5 @@
-import Tests.Router
-import Tests.RouteTrie
-import Tests.Utils
+module
+
+public import Tests.Router
+public import Tests.RouteTrie
+public import Tests.Utils

@@ -1,4 +1,6 @@
-import LeanIO.Middlewares.RequestLogger
-import LeanIO.Middlewares.WithExtension
-import LeanIO.Middlewares.CatchErrors
-import LeanIO.Middlewares.Auth
+module
+
+public import LeanIO.Middlewares.RequestLogger
+public import LeanIO.Middlewares.WithExtension
+public import LeanIO.Middlewares.CatchErrors
+public import LeanIO.Middlewares.Auth

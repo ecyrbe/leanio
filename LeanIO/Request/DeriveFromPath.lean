@@ -1,13 +1,15 @@
-import Lean.Elab.Deriving.Basic
-import Lean.Elab.Deriving.Util
-import Lean.Meta.Inductive
+module
+
+meta import Lean.Elab.Deriving.Basic
+meta import Lean.Elab.Deriving.Util
+meta import Lean.Meta.Inductive
 import LeanIO.Request.FromRequestParts
 
 namespace LeanIO
 
 open Lean Elab Meta Command Deriving
 
-private def mkFromPathBody (indVal : InductiveVal) : TermElabM Term := do
+meta def mkFromPathBody (indVal : InductiveVal) : TermElabM Term := do
   let fields := getStructureFields (← getEnv) indVal.name
   let ctorVal ← getConstInfoCtor indVal.ctors.head!
   let numParams := indVal.numParams
@@ -37,7 +39,7 @@ private def mkFromPathBody (indVal : InductiveVal) : TermElabM Term := do
       $[$stmts:doElem]*
       $result:term)
 
-private def mkFromPathInstanceCmd (declName : Name) : TermElabM Command := do
+meta def mkFromPathInstanceCmd (declName : Name) : TermElabM Command := do
   let indVal ← getConstInfoInduct declName
   let argNames ← mkInductArgNames indVal
   let binders ← mkImplicitBinders argNames
@@ -65,7 +67,7 @@ deriving FromPath
 GET "/users/{userId}/{name}" (params : Path UserParams) => ...
 ```
 -/
-def mkFromPathInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
+meta def mkFromPathInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
   if (← declNames.allM isInductive) && declNames.size > 0 then
     for declName in declNames do
       if isStructure (← getEnv) declName then
@@ -75,7 +77,7 @@ def mkFromPathInstanceHandler (declNames : Array Name) : CommandElabM Bool := do
   else
     return false
 
-initialize
+meta initialize
   registerDerivingHandler ``FromPath mkFromPathInstanceHandler
 
 end LeanIO

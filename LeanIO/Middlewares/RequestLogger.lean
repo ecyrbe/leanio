@@ -1,4 +1,6 @@
-import LeanIO.Router
+module
+
+public import LeanIO.Router
 import LeanIO.Utils
 
 namespace LeanIO.Middlewares
@@ -14,7 +16,7 @@ Example:
   router.addMiddleware requestLogger
 ```
 -/
-def requestLogger: Middleware := fun next req => do
+public def requestLogger: Middleware := fun next req => do
   let path := toString req.line.uri.path
   let method := toString req.line.method
   let start ← IO.monoNanosNow

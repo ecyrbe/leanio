@@ -1,4 +1,7 @@
+module
+
 import LeanIO.Router
+meta import LeanIO.Router
 open LeanIO
 open LeanIO.Router
 open Std Http Server

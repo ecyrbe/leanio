@@ -1,8 +1,10 @@
+module
+
 import Lean
 import Std.Async.ContextAsync
-import Std.Internal.Parsec.ByteArray
-import LeanIO.Request.FromRequestBody
-import LeanIO.Data.Headers.MimeType
+public import Std.Internal.Parsec.ByteArray
+public import LeanIO.Request.FromRequestBody
+public import LeanIO.Data.Headers.MimeType
 
 namespace LeanIO
 open Std.Http Std.Async MimeType
@@ -14,13 +16,13 @@ open Std Internal Parsec ByteArray Char
 For multipart forms, see `LeanIO.Request.MultiPartForm`.
 -/
 
-structure Form (α : Type) where
+public structure Form (α : Type) where
   value : α
 
-class FromForm (α : Type) where
+public class FromForm (α : Type) where
   fromForm : URI.Query → Except String α
 
-instance : FromForm (Std.HashMap String String) where
+public instance : FromForm (Std.HashMap String String) where
   fromForm m := do
     return HashMap.ofArray <| m.filterMap (fun (k,v) =>
         match k,v with
@@ -31,7 +33,7 @@ instance : FromForm (Std.HashMap String String) where
         | _,_ => none)
 
 /-- extracted from Lean Std library URI parser -/
-private def parseQuery (config : URI.Config) : Parser URI.Query := do
+public def parseQuery (config : URI.Config) : Parser URI.Query := do
   let queryBytes ←
     takeWhileAtMost (fun c => isQueryChar c ∨ c = '%'.toUInt8) config.maxQueryLength
 
@@ -62,10 +64,10 @@ private def parseQuery (config : URI.Config) : Parser URI.Query := do
   else
     fail "invalid query string"
 
-instance : HasMimeTypes (Form α) where
+public instance : HasMimeTypes (Form α) where
   mimes? := some [MimeType.formUrlEncoded]
 
-instance [FromForm α] : FromRequestBody (Form α) where
+public instance [FromForm α] : FromRequestBody (Form α) where
   from_request_body req := do
     match checkMimeTypes (Form α) req.line.headers with
     | .error e => return .error (.bad_media_error e)

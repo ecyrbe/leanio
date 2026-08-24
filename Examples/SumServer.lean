@@ -1,3 +1,5 @@
+module
+
 import LeanIO
 open Std Async
 open Std Http Server
@@ -18,7 +20,7 @@ def createUser := POST "/users"
     | Sum.inr f => f.value
   return (Status.created, data)
 
-def main : IO Unit := Async.block do
+public def main : IO Unit := Async.block do
   let router := Router.empty
     |>.addRoute createUser
     |>.addMiddleware catchErrors

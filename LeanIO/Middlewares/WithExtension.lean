@@ -1,4 +1,6 @@
-import LeanIO.Router
+module
+
+public import LeanIO.Router
 
 namespace LeanIO.Middlewares
 open LeanIO Router
@@ -17,7 +19,7 @@ deriving TypeName
 Router.addMiddleware (withExtension Meta { metadata := "hello" }) router
 ```
 -/
-def withExtension (α : Type) [TypeName α] (data : α) : Middleware := fun next req =>
+public def withExtension (α : Type) [TypeName α] (data : α) : Middleware := fun next req =>
   next { req with extensions := req.extensions.insert data }
 
 end LeanIO.Middlewares

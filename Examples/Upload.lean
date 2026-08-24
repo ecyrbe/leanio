@@ -1,3 +1,5 @@
+module
+
 import LeanIO
 open Std Async
 open Std Http Server
@@ -45,7 +47,7 @@ def upload := POST "/upload" (mp : MultiPartForm) => do
 def login := POST "/login" (⟨form⟩ : Form LoginForm) => do
   return s!"logged in as {form.username} ({form.role})"
 
-def main : IO Unit := Async.block do
+public def main : IO Unit := Async.block do
   let addr : Net.SocketAddress := .v4 ⟨.ofParts 127 0 0 1, 8081⟩
   let router := Router.empty
     |>.addRoute upload

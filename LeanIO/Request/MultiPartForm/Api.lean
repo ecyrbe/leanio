@@ -1,8 +1,11 @@
-import Std.Async.ContextAsync
+module
+
+public import Std.Async.ContextAsync
 import Std.Data.ByteSlice
-import LeanIO.Request.FromRequestBody
-import LeanIO.Data.Headers.MimeType
-import LeanIO.Request.MultiPartForm.Defs
+public import LeanIO.Request.FromRequestBody
+public import LeanIO.Data.Headers.MimeType
+public import LeanIO.Request.MultiPartForm.Defs
+public import LeanIO.Request.MultiPartForm.Headers
 import LeanIO.Request.MultiPartForm.Stream
 import LeanIO.Request.MultiPartForm.Parse
 
@@ -17,7 +20,7 @@ Must be called repeatedly until `none` is returned. After a file
 entry, the file body must be fully consumed (via `stream`, `save`,
 `bytes`, or `discard`) before calling `nextEntry` again.
 -/
-def MultiPartForm.nextEntry (mp : MultiPartForm) : ContextAsync (Option MultipartEntry) := do
+public def MultiPartForm.nextEntry (mp : MultiPartForm) : ContextAsync (Option MultipartEntry) := do
   let st ← mp.inner.get
   match st.phase with
   | .done => return none
@@ -37,7 +40,7 @@ file.stream fun chunk => do
   IO.FS.writeBinFile "output.bin" chunk
 ```
 -/
-def FormFile.stream (f : FormFile) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
+public def FormFile.stream (f : FormFile) (cb : ByteArray → ContextAsync Unit) : ContextAsync Unit := do
   let st ← f.inner.get
   match st.phase with
   | .inFile => startStreamFile f cb
@@ -49,7 +52,7 @@ Read and discard the file body without storing it.
 Useful for skipping unused file parts — body is consumed chunk
 by chunk, never buffered.
 -/
-def FormFile.discard (f : FormFile) : ContextAsync Unit := do
+public def FormFile.discard (f : FormFile) : ContextAsync Unit := do
   let st ← f.inner.get
   match st.phase with
   | .inFile =>
@@ -69,7 +72,7 @@ fully buffered in memory. The file is created if it does not exist.
 file.save <| dir / file.filename
 ```
 -/
-def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit := do
+public def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit := do
   let st ← f.inner.get
   match st.phase with
   | .inFile =>
@@ -79,7 +82,7 @@ def FormFile.save (f : FormFile) (path : System.FilePath) : ContextAsync Unit :=
     fStream.flush
   | _ => return
 
-instance : HasMimeTypes (MultiPartForm) where
+public instance : HasMimeTypes (MultiPartForm) where
   mimes? := some [MimeType.multipartForm]
 
 /--
@@ -89,7 +92,7 @@ from a request with Content-Type `multipart/form-data`.
 Extracts the `boundary` parameter and precompiles KMP search patterns
 for boundary detection.
 -/
-instance : FromRequestBody MultiPartForm where
+public instance : FromRequestBody MultiPartForm where
   from_request_body req := do
     match checkMimeTypes MultiPartForm req.line.headers with
     | .error e => return .error (.bad_media_error e)
