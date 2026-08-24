@@ -50,7 +50,7 @@ open LeanIO.Router
 open LeanIO.Middlewares
 open Std Http Server
 open Std Async
-open Lean
+open Json (ToJson FromJson)
 
 set_option linter.unusedVariables false
 

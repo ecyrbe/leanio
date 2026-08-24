@@ -6,7 +6,7 @@ open Std Http Server
 open LeanIO
 open LeanIO.Router
 open LeanIO.Middlewares
-open Lean
+open Json (ToJson)
 
 set_option linter.unusedVariables false
 

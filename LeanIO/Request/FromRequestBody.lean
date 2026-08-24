@@ -1,11 +1,12 @@
 module
 
-public import Lean
+public import Json
 public import Std.Async.ContextAsync
 public import LeanIO.Data.Headers.MimeType
 
 namespace LeanIO
-open Std.Http Std.Async Lean MimeType
+open Std.Http Std.Async MimeType
+open Json (FromJson)
 
 public inductive FromRequestBodyError where
 | bad_media_error (msg: String) -- 415 unsupported media type
@@ -42,12 +43,12 @@ public instance [FromJson α] : FromRequestBody (Json α) where
     | .ok _ =>
       try
         let body : String ← req.body.readAll
-        match Lean.Json.parse body with
+        match Json.parse body with
         | .ok json =>
           match FromJson.fromJson? json with
           | .ok obj => return .ok {body:=obj}
           | .error e => return .error (.semantic_error e)
-        | .error e => return .error (.syntax_error e)
+        | .error e => return .error (.syntax_error (toString e))
       catch e => return .error (.io_error e)
 
 public structure PlainText where

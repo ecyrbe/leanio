@@ -6,7 +6,7 @@ open Std Http Server
 open LeanIO
 open LeanIO.Router
 open LeanIO.Middlewares
-open Lean
+open Json (ToJson FromJson)
 
 structure CreateUser where
   name  : String

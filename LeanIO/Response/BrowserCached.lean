@@ -1,12 +1,13 @@
 module
 
-public import Lean.Data.Json.FromToJson.Basic
+public import Json
 public import LeanIO.Data.Headers.CacheControl
 public import LeanIO.Response.Common
 public import LeanIO.Response.IntoResponse
 
 namespace LeanIO
-open Std.Http Lean
+open Std.Http
+open Json (ToJson toJson)
 
 /--
   A response that will be cached by the browser and the CDN.

@@ -3,6 +3,16 @@ version = "0.6.0"
 defaultTargets = ["LeanIO"]
 testDriver = "Tests"
 
+[[require]]
+name = "json"
+git = "https://github.com/paulbutcher/lean-json.git"
+
+# for `deriving ToJson, FromJson` and `json%`
+[[require]]
+name = "jsonDeriving"
+git = "https://github.com/paulbutcher/lean-json.git"
+subDir = "deriving"
+
 [[lean_lib]]
 name = "LeanIO"
 

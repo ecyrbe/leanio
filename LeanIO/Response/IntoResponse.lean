@@ -2,10 +2,11 @@ module
 
 public import Std.Http
 public import Std.Async.ContextAsync
-public import Lean.Data.Json
+public import Json
 
 namespace LeanIO
-open Std.Http Std.Async Lean
+open Std.Http Std.Async
+open Json (ToJson toJson)
 
 public class IntoResponse (α : Type) where
   into_response : ContextAsync α → ContextAsync (Response Body.Any)

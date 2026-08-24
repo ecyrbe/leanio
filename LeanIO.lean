@@ -1,5 +1,6 @@
 module
 
+public import JsonDeriving
 public import LeanIO.Router
 public import LeanIO.Middlewares
 public import LeanIO.Utils
