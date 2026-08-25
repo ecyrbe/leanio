@@ -48,8 +48,9 @@ def trie2 := RouteTrie.empty
 
 #guard (RouteTrie.lookup trie2 .get ["42"]).isSome
 #guard getCap (RouteTrie.lookup trie2 .get ["42"]) "id" == "42"
-#guard (RouteTrie.lookup trie2 .get [""]).isSome
-#guard getCap (RouteTrie.lookup trie2 .get [""]) "id" == ""
+-- an empty segment is not a parameter value: `/todos/` decodes to ["todos", ""],
+-- and binding "" reported a parse failure for a parameter never sent
+#guard (RouteTrie.lookup trie2 .get [""]).isNone
 
 -- ==========================================
 -- literal + param in same route
@@ -209,3 +210,16 @@ def trie14 := RouteTrie.empty
 #guard (RouteTrie.lookup trie14 .get ["static"]).isNone
 
 end Tests.RouteTrie
+
+-- ==========================================
+-- trailing slash
+-- ==========================================
+def trie15 := RouteTrie.empty
+  |>.addRoute .get [Segment.lit "todos"] h1
+  |>.addRoute .get [Segment.lit "todos", Segment.param "id"] h2
+
+#guard (RouteTrie.lookup trie15 .get ["todos"]).isSome
+#guard (RouteTrie.lookup trie15 .get ["todos", "1"]).isSome
+#guard getCap (RouteTrie.lookup trie15 .get ["todos", "1"]) "id" == "1"
+#guard (RouteTrie.lookup trie15 .get ["todos", ""]).isNone
+#guard (RouteTrie.lookup trie15 .get ["", ""]).isNone

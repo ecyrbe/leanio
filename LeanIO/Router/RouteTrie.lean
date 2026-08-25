@@ -95,8 +95,9 @@ where
         let child ← t.literals.get? seg
         go child rest params)
       <|>
-      -- or else param match ?
-        (do
+      -- or else param match ? An empty segment is not a parameter value: a path
+      -- ending in `/` decodes to a trailing `""`.
+        (if seg.isEmpty then none else do
           let (name, child) ← t.param
           go child rest (params ++ [(name, seg)]))
       <|>
