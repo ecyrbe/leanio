@@ -66,4 +66,48 @@ public instance [ToJson α] : IntoResponse (Status × Headers × α)  where
     let (s, h, a) ← sha
     Response.new.status s |>.headers h |>.json <| Json.pretty <| toJson a
 
+/--
+Wraps a handler result so it can carry response extensions, the channel a middleware
+reads to learn what the handler decided (a session to persist, a cookie to set).
+
+The extensions are held as pending inserts rather than a finished map, so they are applied
+on top of whatever the wrapped value's own `IntoResponse` produced instead of replacing it.
+
+```lean4
+GET "/login" => Tagged.new "welcome" |>.extension (SessionUpdate.write session)
+```
+-/
+public structure Tagged (α : Type) where
+  value : α
+  tag : Extensions → Extensions := id
+
+@[expose] public def Tagged.new (value : α) : Tagged α := { value }
+
+@[expose] public def Tagged.extension [TypeName β] (self : Tagged α) (data : β) : Tagged α :=
+  { self with tag := fun exts => (self.tag exts).insert data }
+
+/--
+Replaces the extension of type `β` with `f` applied to whatever is already there.
+
+`extension` overwrites, which loses earlier contributions to an accumulator such as a
+`Set-Cookie` list. Use this to append to one instead.
+-/
+@[expose] public def Tagged.modifyExtension [TypeName β] (self : Tagged α)
+    (f : Option β → β) : Tagged α :=
+  { self with tag := fun exts =>
+      let inner := self.tag exts
+      inner.insert (f (inner.get β)) }
+
+public instance [IntoResponse α] : IntoResponse (Tagged α) where
+  into_response t := do
+    let t ← t
+    let resp ← IntoResponse.into_response (α := α) (pure t.value)
+    return { resp with extensions := t.tag resp.extensions }
+
+public instance [IntoResponseExt α] : IntoResponseExt (Tagged α) where
+  into_response_ext req t := do
+    let t ← t
+    let resp ← IntoResponseExt.into_response_ext (α := α) req (pure t.value)
+    return { resp with extensions := t.tag resp.extensions }
+
 end LeanIO
