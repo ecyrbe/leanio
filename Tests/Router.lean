@@ -66,10 +66,10 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 def th : HandlerFn := fun _ => default
 def th2 : HandlerFn := fun _ => default
 
-def getCap' (result : Option (List (String × String) × HandlerFn)) (key : String) : String :=
+def getCap' (result : RouteTrie.Lookup) (key : String) : String :=
   match result with
-  | some (vs, _) => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
-  | none => ""
+  | .found vs _ => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
+  | _ => ""
 
 def subRouter : Router := Router.empty
   |>.addRoute (Route.new .get "/todos" th)
@@ -83,32 +83,32 @@ def rootRouter : Router := Router.empty
 def rootTrie := rootRouter.toRouteTrie
 
 -- own routes are reachable
-#guard (rootTrie.lookup .get ["health"]).isSome
+#guard (rootTrie.lookup .get ["health"]).toOption.isSome
 -- sub-router routes are reachable under the mount prefix only
-#guard (rootTrie.lookup .get ["api", "v1", "todos"]).isSome
-#guard (rootTrie.lookup .post ["api", "v1", "todos"]).isSome
-#guard (rootTrie.lookup .get ["api", "v1", "todos", "42"]).isSome
+#guard (rootTrie.lookup .get ["api", "v1", "todos"]).toOption.isSome
+#guard (rootTrie.lookup .post ["api", "v1", "todos"]).toOption.isSome
+#guard (rootTrie.lookup .get ["api", "v1", "todos", "42"]).toOption.isSome
 #guard getCap' (rootTrie.lookup .get ["api", "v1", "todos", "42"]) "id" == "42"
-#guard (rootTrie.lookup .get ["todos"]).isNone
-#guard (rootTrie.lookup .put ["api", "v1", "todos"]).isNone
+#guard (rootTrie.lookup .get ["todos"]).toOption.isNone
+#guard (rootTrie.lookup .put ["api", "v1", "todos"]).toOption.isNone
 
 -- nested sub-routers compose prefixes
 def nestedRoot : Router := Router.empty
   |>.addRouter "/api" (Router.empty |>.addRouter "/v2" subRouter)
 
-#guard ((nestedRoot.toRouteTrie).lookup .get ["api", "v2", "todos"]).isSome
-#guard ((nestedRoot.toRouteTrie).lookup .get ["api", "todos"]).isNone
+#guard ((nestedRoot.toRouteTrie).lookup .get ["api", "v2", "todos"]).toOption.isSome
+#guard ((nestedRoot.toRouteTrie).lookup .get ["api", "todos"]).toOption.isNone
 
 -- middlewares don't change the shape of the compiled trie
 def mwRouter : Router := rootRouter
   |>.addMiddleware id
   |>.addMiddleware id
 
-#guard ((mwRouter.toRouteTrie).lookup .get ["api", "v1", "todos"]).isSome
-#guard ((mwRouter.toRouteTrie).lookup .get ["health"]).isSome
+#guard ((mwRouter.toRouteTrie).lookup .get ["api", "v1", "todos"]).toOption.isSome
+#guard ((mwRouter.toRouteTrie).lookup .get ["health"]).toOption.isSome
 
 -- empty router compiles to an empty trie
-#guard ((Router.empty.toRouteTrie).lookup .get []).isNone
+#guard ((Router.empty.toRouteTrie).lookup .get []).toOption.isNone
 
 -- first-registered route wins for identical method+pattern
 def rfirst : Router := Router.empty
@@ -117,4 +117,4 @@ def rfirst : Router := Router.empty
 
 def rtFirst := rfirst.toRouteTrie
 -- Since both are `default` we just check the route is found.
-#guard (rtFirst.lookup .get ["dup"]).isSome
+#guard (rtFirst.lookup .get ["dup"]).toOption.isSome
