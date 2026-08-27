@@ -19,7 +19,7 @@ The handler must return a `ContextAsync R` where `R` implements `IntoResponse` o
 
 ```lean4
 -- 0 params (sync)
-GET "/ping" => pure "pong"
+GET "/ping" => "pong"
 
 -- 0 params (async)
 GET "/status" => do
