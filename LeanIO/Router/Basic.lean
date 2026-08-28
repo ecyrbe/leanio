@@ -22,6 +22,8 @@ public structure Router where
   routers     : Array (String × Router) := #[]
   routes      : Array Route := #[]
   middlewares : Array Middleware := #[]
+  /-- Serves any request matching no route, whatever its method. -/
+  notFound    : Option HandlerFn := none
 
 /-- Creates an empty router with no routes, sub-routers or middlewares. -/
 public def Router.empty : Router := {}
@@ -72,6 +74,16 @@ public def Router.addMiddleware (mw : Middleware) (self : Router) : Router :=
   { self with middlewares := self.middlewares.push mw }
 
 /--
+Sets the handler for requests matching no route.
+
+Unlike a catch-all route, this is not method-specific, so a JSON API keeps one
+error shape for every miss rather than only for the methods it happened to
+register.
+-/
+public def Router.withNotFound (handler : HandlerFn) (self : Router) : Router :=
+  { self with notFound := some handler }
+
+/--
 Compiles the router tree into a flat `RouteTrie`.
 
 For every route the handler is wrapped as
@@ -88,12 +100,13 @@ public partial def Router.toRouteTrie (self : Router) : RouteTrie :=
     let h := applyMiddlewares route.middlewares route.handler
     acc.addRoute route.method route.pat.segments (wrap h)
   ) RouteTrie.empty
-  self.routers.foldr (fun (pre, sub) acc =>
+  let trie := self.routers.foldr (fun (pre, sub) acc =>
     let preSegs := (RoutePattern.ofString pre).segments
     RouteTrie.fold (Router.toRouteTrie sub) (fun method segs handler acc =>
       acc.addRoute method (preSegs ++ segs) (wrap handler)
     ) acc
   ) trie
+  { trie with notFound := self.notFound.map wrap }
 
 
 public instance : Coe Router RouteTrie where

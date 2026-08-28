@@ -211,8 +211,10 @@ def deleteComment := DELETE "/todos/{id}/comments/{cId}" (⟨ref⟩ : TodoStoreR
       return Except.ok s!"Comment {cId} deleted"
     | none => return Except.error (Status.notFound, APIError.mk "Not Found" s!"Comment {cId} not found")
 
-def anyRoute := GET "/{*rest}" (⟨rest⟩ : Path String) =>
-    pure (Status.notFound, APIError.mk "Not Found" s!"no matching route for '{rest}'")
+def notFoundHandler : HandlerFn := fun req =>
+    IntoResponse.into_response <| pure
+      (Status.notFound,
+       APIError.mk "Not Found" s!"no matching route for '{req.line.uri.path}'")
 
 -- ==========================================
 -- Router construction
@@ -233,7 +235,7 @@ def todosRouter : Router := Router.empty
 
 def rootRouter : Router := Router.empty
   |>.addRouter "/api/v1" todosRouter
-  |>.addRoute anyRoute
+  |>.withNotFound notFoundHandler
 
 -- ==========================================
 -- Entry point
