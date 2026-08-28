@@ -31,7 +31,7 @@ meta def mkFromQueryBody (indVal : InductiveVal) : TermElabM Term := do
       let defaultFn? := getDefaultFnForField? (← getEnv) indVal.name fieldName
 
       stmts := stmts.push (← `(doElem|
-        let $rawIdent:ident : Option String := qs.get $fnameLit:str
+        let $rawIdent:ident : Option String := $(mkCIdent ``lookupParam) qs $fnameLit:str
       ))
 
       if isOpt then

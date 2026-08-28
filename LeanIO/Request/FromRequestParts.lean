@@ -52,6 +52,18 @@ public instance : FromRequestParts URI.Query where
 public instance : FromRequestParts URI.Path where
   from_request_parts req := pure req.line.uri.path
 
+/--
+Looks up a query or form parameter, comparing `key` against decoded parameter
+names. `URI.Query.get` instead encodes `key`, which only matches when the client
+happened to percent-encode the name exactly as `EncodedQueryParam.encode` does.
+Removable in favour of `URI.Query.get` once leanprover/lean4#14934 lands.
+-/
+public def lookupParam (qs : URI.Query) (key : String) : Option String :=
+  match qs.toArray.find? (fun (name, _) => name.decode == some key) with
+  | none => none
+  | some (_, none) => some ""
+  | some (_, some value) => value.decode
+
 public class FromPath (α : Type) where
   fromPath : Std.HashMap String String → Except String α
 
