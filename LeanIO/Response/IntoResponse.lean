@@ -2,7 +2,6 @@ module
 
 public import Std.Http
 public import Std.Async.ContextAsync
-public import Lean.Data.Json
 
 namespace LeanIO
 open Std.Http Std.Async Lean
@@ -36,10 +35,11 @@ public instance : IntoResponse Status where
     let status ← status
     Response.new.status status |>.empty
 
-public instance [ToJson α] : IntoResponse α where
+@[instance_reducible] public def IntoResponse.ofJson {α : Type} (render : α → String)
+: IntoResponse α where
   into_response a := do
     let a ← a
-    Response.ok |>.json <| Json.pretty <| toJson a
+    Response.ok |>.json <| render a
 
 public instance [IntoResponse ε] [IntoResponse α] : IntoResponse (Except ε α) where
   into_response res := do match ← res with
@@ -56,14 +56,17 @@ public instance : IntoResponse (Status × String)  where
     let (s, str) ← sstr
     Response.new.status s |>.text str
 
-public instance [ToJson α] : IntoResponse (Status × α)  where
+@[instance_reducible] public def IntoResponse.ofJsonWithStatus {α : Type} (render : α → String)
+: IntoResponse (Status × α) where
   into_response sa := do
     let (s, a) ← sa
-    Response.new.status s |>.json <| Json.pretty <| toJson a
+    Response.new.status s |>.json <| render a
 
-public instance [ToJson α] : IntoResponse (Status × Headers × α)  where
+@[instance_reducible] public def IntoResponse.ofJsonWithStatusHeaders {α : Type}
+    (render : α → String)
+: IntoResponse (Status × Headers × α) where
   into_response sha := do
     let (s, h, a) ← sha
-    Response.new.status s |>.headers h |>.json <| Json.pretty <| toJson a
+    Response.new.status s |>.headers h |>.json <| render a
 
 end LeanIO

@@ -46,6 +46,7 @@ later chapters provide the full API reference.
 
 ```lean
 import LeanIO
+import LeanIO.Json.Std
 open LeanIO.Router
 open LeanIO.Middlewares
 open Std Http Server
@@ -376,6 +377,31 @@ deriving FromJson
 
 def create := POST "/items" (⟨body⟩ : Json CreateRequest) => do
     return (Status.created, Item.of body)
+```
+
+##### Choosing a JSON backend
+
+To use `Lean.Data.Json`:
+
+```lean
+import LeanIO
+import LeanIO.Json.Std
+open Lean (ToJson FromJson)
+```
+
+To use [lean-json](https://github.com/paulbutcher/lean-json), add its adapter package:
+
+```toml
+[[require]]
+name = "leanioJson"
+git = "https://github.com/paulbutcher/lean-json.git"
+subDir = "leanio"
+```
+
+```lean
+import LeanIO
+import LeanIOJson
+open Json (ToJson FromJson)
 ```
 
 #### 3.2.2 `PlainText`

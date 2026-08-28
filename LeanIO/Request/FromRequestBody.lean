@@ -7,6 +7,10 @@ public import LeanIO.Data.Headers.MimeType
 namespace LeanIO
 open Std.Http Std.Async Lean MimeType
 
+public inductive JsonError where
+| syntax_error (msg : String)
+| semantic_error (msg : String)
+
 public inductive FromRequestBodyError where
 | bad_media_error (msg: String) -- 415 unsupported media type
 | syntax_error (msg: String) -- 400 bad request
@@ -35,19 +39,19 @@ public structure Json (α: Type) where
 public instance: HasMimeTypes (Json α) where
   mimes? := some [MimeType.applicationJson]
 
-public instance [FromJson α] : FromRequestBody (Json α) where
+@[instance_reducible] public def FromRequestBody.ofJson {α : Type}
+    (decode : String → Except JsonError α)
+: FromRequestBody (Json α) where
   from_request_body req := do
     match checkMimeTypes (Json α) req.line.headers with
     | .error e => return .error (.bad_media_error e)
     | .ok _ =>
       try
         let body : String ← req.body.readAll
-        match Lean.Json.parse body with
-        | .ok json =>
-          match FromJson.fromJson? json with
-          | .ok obj => return .ok {body:=obj}
-          | .error e => return .error (.semantic_error e)
-        | .error e => return .error (.syntax_error e)
+        match decode body with
+        | .ok obj => return .ok {body:=obj}
+        | .error (.syntax_error e) => return .error (.syntax_error e)
+        | .error (.semantic_error e) => return .error (.semantic_error e)
       catch e => return .error (.io_error e)
 
 public structure PlainText where
