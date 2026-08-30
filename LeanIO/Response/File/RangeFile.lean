@@ -38,8 +38,8 @@ public def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (
   match ranges with
   | none => none
   | some rs =>
-    if _ : rs.size > 0 then
-      let r := rs[0]!
+    if h : rs.size > 0 then
+      let r := rs[0]
       let (start, len) := match r.start, r.stop with
         | some s, some e =>
           if s >= fileSize then (0, 0) else
@@ -54,6 +54,27 @@ public def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (
         | none, none => (0, fileSize)
       some (start, len)
     else none
+
+/--
+Whatever byte range `pickRange` selects lies inside the file. This is what stops a
+malformed or hostile `Range` header from producing a read past the end of the file,
+or a `Content-Range` promising bytes the response cannot send.
+
+`ranges` is the parsed header value and `fileSize` the file's length. Read
+`some (s, l)` as "serve `l` bytes from offset `s`", so `s + l` is the offset one
+past the last byte served and the conclusion places it within the file. The
+hypothesis is satisfiable rather than vacuous: every non-empty `ranges` yields a
+`some`, and only `none` or an empty array give `none`.
+-/
+public theorem pickRange_end_le {ranges : Option (Array Range)} {fileSize s l : Nat}
+    (h : pickRange ranges fileSize = some (s, l)) : s + l ≤ fileSize := by
+  rcases ranges with _ | rs
+  · simp [pickRange] at h
+  · by_cases hpos : rs.size > 0
+    · rw [pickRange, dif_pos hpos] at h
+      rcases hst : rs[0].start with _ | a <;> rcases hsp : rs[0].stop with _ | b <;>
+        simp only [hst, hsp] at h <;> (try split at h) <;> simp_all <;> omega
+    · simp [pickRange, hpos] at h
 
 public instance : IntoResponseExt RangeFile where
   into_response_ext req f := do
