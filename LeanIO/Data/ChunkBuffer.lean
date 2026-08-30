@@ -75,7 +75,7 @@ public def startsWithAt (self : ChunkBuffer) (pos : Nat) (needle : ByteArray) : 
 public def toByteArray (self : ChunkBuffer) : ByteArray :=
   self.chunks.foldl (· ++ ·.toByteArrayFast) ByteArray.empty
 
-public partial def extract (self : ChunkBuffer) (start : Nat) (stop : Nat) : ChunkBuffer :=
+public def extract (self : ChunkBuffer) (start : Nat) (stop : Nat) : ChunkBuffer :=
   go 0 start (stop - start) ChunkBuffer.empty
 where
   go (chunkIdx : Nat) (off : Nat) (rem : Nat) (acc : ChunkBuffer) : ChunkBuffer :=
@@ -87,6 +87,8 @@ where
       else
         let avail := min (chunk.size - off) rem
         go (chunkIdx + 1) 0 (rem - avail) (acc.addSlice <| chunk.slice off (off + avail))
+  termination_by self.chunks.size - chunkIdx
+  decreasing_by all_goals simp_all; omega
 
 public instance : Search.Sized ChunkBuffer where
   size := ChunkBuffer.size
