@@ -67,8 +67,8 @@ where
 public def startsWithAt (self : ChunkBuffer) (pos : Nat) (needle : ByteArray) : Bool :=
   if pos + needle.size > self.size then false
   else Id.run do
-    for i in [0:needle.size] do
-      if self.byteAt! (pos + i) ≠ needle.get! i then return false
+    for h : i in [0:needle.size] do
+      if self.byteAt! (pos + i) ≠ needle[i] then return false
     return true
 
 @[inline]
