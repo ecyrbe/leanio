@@ -84,29 +84,44 @@ public def Router.withNotFound (handler : HandlerFn) (self : Router) : Router :=
   { self with notFound := some handler }
 
 /--
-Compiles the router tree into a flat `RouteTrie`.
+Every route in the tree, in declaration order: a router's own routes come before
+those of the routers mounted under it, and each group keeps its registration order.
+Mount prefixes are prepended and all middlewares are composed here.
 
-For every route the handler is wrapped as
+Handlers are wrapped as
 `router middlewares (… (sub-router middlewares (route middlewares handler)))`,
 i.e. route-level middlewares are innermost, each enclosing router's middlewares
 wrap around, and the outermost router's middlewares run first.
-
-Own routes are inserted before sub-router routes; sub-router patterns get the
-mount prefix prepended. All composition happens here, once — never at dispatch.
 -/
-public partial def Router.toRouteTrie (self : Router) : RouteTrie :=
+public def Router.flatten (self : Router) : Array (Method × List Segment × HandlerFn) :=
   let wrap := applyMiddlewares self.middlewares
-  let trie := self.routes.foldr (fun route acc =>
-    let h := applyMiddlewares route.middlewares route.handler
-    acc.addRoute route.method route.pat.segments (wrap h)
-  ) RouteTrie.empty
-  let trie := self.routers.foldr (fun (pre, sub) acc =>
+  let own := self.routes.map fun route =>
+    (route.method, route.pat.segments, wrap (applyMiddlewares route.middlewares route.handler))
+  let subs := self.routers.attach.flatMap fun ⟨(pre, sub), _h⟩ =>
     let preSegs := (RoutePattern.ofString pre).segments
-    RouteTrie.fold (Router.toRouteTrie sub) (fun method segs handler acc =>
-      acc.addRoute method (preSegs ++ segs) (wrap handler)
-    ) acc
-  ) trie
-  { trie with notFound := self.notFound.map wrap }
+    sub.flatten.map fun (method, segs, handler) => (method, preSegs ++ segs, wrap handler)
+  own ++ subs
+decreasing_by
+  have := Array.sizeOf_lt_of_mem _h
+  cases self
+  simp_all
+  omega
+
+/--
+Compiles the router tree into a flat `RouteTrie`.
+
+Routes are inserted in reverse declaration order, so where two of them claim the
+same method and pattern the first one declared is the one that serves it. That
+holds uniformly, whether the loser was registered on this router or on one mounted
+under it. All composition happens here, once — never at dispatch.
+
+Only the root's `notFound` is consulted, so a mounted router's own fallback is
+discarded rather than serving misses below its prefix.
+-/
+public def Router.toRouteTrie (self : Router) : RouteTrie :=
+  let trie := self.flatten.foldr (fun (method, segs, handler) acc =>
+    acc.addRoute method segs handler) RouteTrie.empty
+  { trie with notFound := self.notFound.map (applyMiddlewares self.middlewares) }
 
 
 public instance : Coe Router RouteTrie where

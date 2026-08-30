@@ -151,39 +151,6 @@ where
           handlerAt child method (params ++ [(name, String.intercalate "/" (seg :: rest))])
         | none => .noMatch)
 
-/--
-Walks the trie depth-first, calling `f method segs handler acc` for every stored
-handler, where `segs` is the reconstructed path of `Segment` values leading to it
-with the original parameter names preserved.
-
-Example: given a trie containing
-
-  ```
-  GET /todos             → h1
-  POST /todos            → h2
-  GET /todos/{id}        → h3
-  ```
-
-`fold trie (fun m segs h acc => (m, segs) :: acc) []` produces
-
-  ```lean4
-  [(GET,  [lit "todos", param "id"]),
-   (POST, [lit "todos"]),
-   (GET,  [lit "todos"])]
-  ```
-
-(order is deterministic but insertion-dependent, not route-priority).
--/
-public partial def fold (self : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
-  foldGo f self [] init
-where
-  foldGo (f : Method → List Segment → HandlerFn → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
-    let acc := HashMap.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
-    let acc := HashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
-    let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
-    let acc := match t.wildcard with | none => acc | some (name, child) => foldGo f child (Segment.rest name :: revSegs) acc
-    acc
-
 /-- `Allow` header value for a set of methods, with `HEAD` implied by `GET`. -/
 public def allowValue (methods : List Method) : String :=
   let methods := if methods.contains .get && !(methods.contains .head)

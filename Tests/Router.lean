@@ -118,3 +118,24 @@ def rfirst : Router := Router.empty
 def rtFirst := rfirst.toRouteTrie
 -- Since both are `default` we just check the route is found.
 #guard (rtFirst.lookup .get ["dup"]).toOption.isSome
+
+-- flatten lists own routes before mounted ones, each in registration order,
+-- with mount prefixes prepended; toRouteTrie inserts this in reverse, so the
+-- earlier entry is the one that survives a clash
+def flatShape (r : Router) : List (Method × List Segment) :=
+  r.flatten.toList.map fun (m, segs, _) => (m, segs)
+
+#guard flatShape rootRouter == [
+  (Method.get,  [Segment.lit "health"]),
+  (Method.get,  [Segment.lit "api", Segment.lit "v1", Segment.lit "todos"]),
+  (Method.post, [Segment.lit "api", Segment.lit "v1", Segment.lit "todos"]),
+  (Method.get,  [Segment.lit "api", Segment.lit "v1", Segment.lit "todos", Segment.param "id"])
+]
+
+#guard flatShape nestedRoot == [
+  (Method.get,  [Segment.lit "api", Segment.lit "v2", Segment.lit "todos"]),
+  (Method.post, [Segment.lit "api", Segment.lit "v2", Segment.lit "todos"]),
+  (Method.get,  [Segment.lit "api", Segment.lit "v2", Segment.lit "todos", Segment.param "id"])
+]
+
+#guard flatShape Router.empty == []
