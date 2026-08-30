@@ -62,6 +62,9 @@ namespace LeanIO
 public structure Search (α: Type) where
   needle: α
   LPS : Array Nat
+  /-- KMP's failure links only ever point strictly backwards. Out-of-range `k`
+      reads as `0`, so this covers the whole of `Nat` without a size side condition. -/
+  lps_le : ∀ k : Nat, LPS[k]! ≤ k
 
 namespace Search
 
@@ -70,6 +73,17 @@ namespace Search
 
   public instance : Sized ByteArray where
    size:= ByteArray.size
+
+  /-- Clamps each entry to its own index, which is what `lps_le` asks for and what a
+      correctly built LPS table already satisfies. -/
+  public def ofLPS {α : Type} (needle : α) (raw : Array Nat) : Search α :=
+    { needle
+      LPS := raw.mapIdx (fun i v => min v i)
+      lps_le := by
+        intro k
+        simp only [getElem!_def]
+        split <;> simp_all
+        omega }
 
   @[specialize]
   public def new {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (needle: α) : Search α:= Id.run do
@@ -85,10 +99,10 @@ namespace Search
         i := i + 1
       else
         len := LPS[len - 1]!
-    return {needle, LPS}
+    return ofLPS needle LPS
 
   @[specialize]
-  public partial def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
+  public def search {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat := 0): Option Nat := do
     if Sized.size self.needle = 0 then
       return start
     else if start + Sized.size self.needle > (Sized.size haystack) then
@@ -101,12 +115,17 @@ namespace Search
           else go (i + 1) (j + 1)
         else if j = 0 then go (i + 1) 0
         else go i (self.LPS[j - 1]!)
+      termination_by (Sized.size haystack - i, j)
+      decreasing_by
+        all_goals simp_all
+        all_goals have := self.lps_le (j - 1)
+        all_goals omega
       go start 0
 
   /-- Compute the longest prefix-suffix overlap between the end of `haystack` and `needle`.
       Returns the number of trailing bytes that form a prefix of `needle`.
       Runs KMP on only the last `needle.size - 1` bytes. -/
-  public partial def terminalOverlap {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat) : Nat :=
+  public def terminalOverlap {α : Type } {dom: α → Nat → Prop} [BEq el] [DecidableEq el] [Inhabited el] [GetElem? α Nat el dom] [Sized α] (self: Search α) (haystack: α) (start: Nat) : Nat :=
     let n := Sized.size self.needle
     if n = 0 then 0
     else
@@ -118,6 +137,11 @@ namespace Search
           go (i + 1) (j + 1) endPoint
         else if j = 0 then go (i + 1) 0 endPoint
         else go i (self.LPS[j - 1]!) endPoint
+      termination_by (endPoint - i, j)
+      decreasing_by
+        all_goals simp_all
+        all_goals have := self.lps_le (j - 1)
+        all_goals omega
       go (start + scanStart) 0 (Sized.size haystack)
 
 end Search

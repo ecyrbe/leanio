@@ -32,7 +32,7 @@ elab "kmp! " t:str : term => do
       let cb := ChunkBuffer.ofByteArray s.toUTF8
       let lps := (Search.new cb).LPS
       let lpsNums : Array (TSyntax `term) := lps.map (λ (n : Nat) => ⟨Syntax.mkNumLit (toString n)⟩)
-      let stx ← `(Search.mk (α := ChunkBuffer) (ChunkBuffer.ofByteArray ($(quote s) : String).toUTF8) #[$[$lpsNums],*])
+      let stx ← `(Search.ofLPS (α := ChunkBuffer) (ChunkBuffer.ofByteArray ($(quote s) : String).toUTF8) #[$[$lpsNums],*])
       elabTerm stx none
 
 public abbrev crlfcrlfSearch := kmp! "\r\n\r\n"
