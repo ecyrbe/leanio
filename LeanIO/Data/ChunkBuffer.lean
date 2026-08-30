@@ -79,16 +79,16 @@ public def extract (self : ChunkBuffer) (start : Nat) (stop : Nat) : ChunkBuffer
   go 0 start (stop - start) ChunkBuffer.empty
 where
   go (chunkIdx : Nat) (off : Nat) (rem : Nat) (acc : ChunkBuffer) : ChunkBuffer :=
-    if rem = 0 || chunkIdx ≥ self.chunks.size then acc
+    if h : rem = 0 ∨ chunkIdx ≥ self.chunks.size then acc
     else
-      let chunk := self.chunks[chunkIdx]!
+      let chunk := self.chunks[chunkIdx]'(by omega)
       if off ≥ chunk.size then
         go (chunkIdx + 1) (off - chunk.size) rem acc
       else
         let avail := min (chunk.size - off) rem
         go (chunkIdx + 1) 0 (rem - avail) (acc.addSlice <| chunk.slice off (off + avail))
   termination_by self.chunks.size - chunkIdx
-  decreasing_by all_goals simp_all; omega
+  decreasing_by all_goals omega
 
 public instance : Search.Sized ChunkBuffer where
   size := ChunkBuffer.size
