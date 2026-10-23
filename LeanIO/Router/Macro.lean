@@ -5,12 +5,20 @@ import Std.Http
 import LeanIO.Router.RoutePattern
 import LeanIO.Router.Route
 public import LeanIO.Router.Extractor
+public import LeanIO.Backend.LeanIn
 
 namespace LeanIO.Router
 open Std Http Server
 open Std.Async
 open Lean
 open Lean.Macro
+
+/-- Selects the native backend for the unprefixed `GET … => …` route syntax in the current scope. The
+default keeps the stock `ContextAsync` backend; `set_option leanio.backend.native true` switches it. -/
+register_option leanio.backend.native : Bool := {
+  defValue := false
+  descr := "expand `GET … => …` and the other route keywords to the native LeanIn backend"
+}
 
 public meta def isValidParamName (s : String) : Bool :=
   if s.isEmpty then false
@@ -91,11 +99,12 @@ Maps an uppercase method keyword (e.g. `GET`) to its `Method.` constructor name
 (e.g. `Method.get`).  Most methods just lowercase the whole keyword; two
 constructors (`baselineControl`, `versionControl`) are handled specially.
 -/
-meta def resolveMethodCon (keyword : Name) : Name :=
+public meta def resolveMethodCon (keyword : Name) : Name :=
   let s := keyword.toString
-  if s == "BASELINECONTROL" then `Method.baselineControl
-  else if s == "VERSIONCONTROL" then `Method.versionControl
-  else Name.mkStr2 "Method" (s.toLower)
+  let root := Name.str (Name.str (Name.str .anonymous "Std") "Http") "Method"
+  if s == "BASELINECONTROL" then Name.str root "baselineControl"
+  else if s == "VERSIONCONTROL" then Name.str root "versionControl"
+  else Name.str root s.toLower
 
 /--
 Expands a route term like `GET "/user/{id}" (⟨id⟩: Path Nat) => body` into
@@ -197,10 +206,66 @@ router.addRoute (POST "/todos" (req : Request CreateTodoRequest) => ...)
 -/
 syntax method str extractorBinder* "=>" term : term
 
-macro_rules
+/-- A route value for the native backend, from an already-built handler: `nativeRoute GET "/ping" ping`. -/
+syntax "nativeRoute" method str term : term
+
+meta def expandNativeRouteValue (m : TSyntax `method) (pat : TSyntax `str) (body : TSyntax `term) :
+    MacroM Term := do
+  let some source := m.raw.reprint | Macro.throwErrorAt m "failed to read method keyword"
+  let methodName := source.trimAscii |>.toString |> Name.mkSimple
+  let methodTerm : Term := mkIdent (resolveMethodCon methodName)
+  let patStr := pat.getString
+  match validateRoutePattern patStr with
+  | .error e => Macro.throwErrorAt pat e
+  | .ok () => pure ()
+  `({ method := $methodTerm, pattern := RoutePattern.ofString $pat, handler := $body :
+      LeanIO.Backend.LeanIn.NativeRoute })
+
+/-- The native expansion of the arrow route syntax: the body is an `AppM` computation and the binder chain is
+adapted by the native extractor classes. -/
+meta def expandNativeArrow (methodName : Name) (pat : TSyntax `str) (bs : Array Syntax)
+    (body : TSyntax `term) : MacroM Term := do
+  let patStr := pat.getString
+  match validateRoutePattern patStr with
+  | .error e => Macro.throwErrorAt pat e
+  | .ok () => pure ()
+  let patTerm ← mkRoutePatternTerm patStr
+  let methodTerm : Term := mkIdent (resolveMethodCon methodName)
+  let handler ←
+    match bs.toList with
+    | [] =>
+      `(let fn (_ : Unit) : LeanIO.Backend.LeanIn.AppM Unit :=
+          LeanIO.Backend.LeanIn.runBody $body
+        LeanIO.Backend.LeanIn.NativeExtractor.extract fn)
+    | binders =>
+      let lam ← binders.foldrM (fun b inner => do
+        match b with
+        | `(extractorBinder| ($pat:term : $ty:term)) => `(fun ($pat : $ty) => $inner)
+        | _ => Macro.throwErrorAt b "invalid extractor binder")
+        (← `(LeanIO.Backend.LeanIn.runBody $body))
+      `(let fn := $lam; LeanIO.Backend.LeanIn.NativeExtractor.extract fn)
+  `({ method := $methodTerm, pattern := $patTerm, handler := $handler :
+      LeanIO.Backend.LeanIn.NativeRoute })
+
+/-- `native GET "/todos" (body : Json T) => …` — the route declaration syntax, selecting the native backend.
+The unprefixed `GET … => …` remains the stock backend. -/
+syntax "native " method str extractorBinder* "=>" term : term
+
+elab_rules : term
   | `($method:method $pat:str $bs:extractorBinder* => $body:term) => do
+    let some source := method.raw.reprint | throwErrorAt method "failed to read method keyword"
+    let methodName := source.trimAscii |>.toString |> Name.mkSimple
+    let useNative ← getBoolOption `leanio.backend.native
+    let stx ← Lean.Elab.liftMacroM <|
+      if useNative then expandNativeArrow methodName pat bs body
+      else expandRouteTerm (resolveMethodCon methodName) pat bs body
+    Lean.Elab.Term.elabTerm stx none
+
+macro_rules
+  | `(native $method:method $pat:str $bs:extractorBinder* => $body:term) => do
     let some source := method.raw.reprint | Macro.throwErrorAt method "failed to read method keyword"
     let methodName := source.trimAscii |>.toString |> Name.mkSimple
-    expandRouteTerm (resolveMethodCon methodName) pat bs body
+    expandNativeArrow methodName pat bs body
+  | `(nativeRoute $method:method $pat:str $body:term) => expandNativeRouteValue method pat body
 
 end LeanIO.Router

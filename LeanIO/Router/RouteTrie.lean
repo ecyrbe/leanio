@@ -25,53 +25,53 @@ Priority: literal > param (`{param}`) > wildcard (`{*rest}`)
 
 Uses `HashMap` for handlers and `HashMap.Raw` for literals to allow recursive definition
 -/
-public structure RouteTrie where
-  handlers : HashMap Method HandlerFn     := ∅
-  literals : HashMap.Raw String RouteTrie := ∅
-  param    : Option (String × RouteTrie)  := none
-  wildcard : Option (String × RouteTrie)  := none
+public structure RouteTrie (H : Type) where
+  handlers : HashMap Method H             := ∅
+  literals : HashMap.Raw String (RouteTrie H) := ∅
+  param    : Option (String × RouteTrie H)  := none
+  wildcard : Option (String × RouteTrie H)  := none
   /-- Fallback for a request matching no route. Only the root node's is consulted. -/
-  notFound : Option HandlerFn             := none
+  notFound : Option H             := none
 
 namespace RouteTrie
 
 /-- Empty trie with no routes. -/
-public def empty : RouteTrie := {}
+public def empty {H : Type} : RouteTrie H := {}
 
-public instance : Inhabited RouteTrie := ⟨empty⟩
+public instance {H : Type} : Inhabited (RouteTrie H) := ⟨empty⟩
 
-public instance : EmptyCollection RouteTrie := ⟨empty⟩
+public instance {H : Type} : EmptyCollection (RouteTrie H) := ⟨empty⟩
 
 /--
 Inserts a route into the trie given its method, segment list, and composed handler.
 
 Middlewares should be composed onto the handler before insertion.
 -/
-public def addRoute (self : RouteTrie) (method : Method) (segs : List Segment) (handler : HandlerFn) : RouteTrie :=
+public def addRoute {H : Type} (self : RouteTrie H) (method : Method) (segs : List Segment) (handler : H) : RouteTrie H :=
   match segs with
   | [] => { self with handlers := self.handlers.insert method handler }
   | Segment.lit s :: rest =>
-    let child := self.literals.get? s |>.getD empty
+    let child := self.literals.get? s |>.getD (empty : RouteTrie H)
     { self with literals := self.literals.insert s (addRoute child method rest handler) }
   | Segment.param name :: rest =>
-    let child := match self.param with | some (_, c) => c | none => empty
+    let child := match self.param with | some (_, c) => c | none => (empty : RouteTrie H)
     { self with param := some (name, addRoute child method rest handler) }
   | Segment.rest name :: rest =>
-    let child := match self.wildcard with | some (_, c) => c | none => empty
+    let child := match self.wildcard with | some (_, c) => c | none => (empty : RouteTrie H)
     { self with wildcard := some (name, addRoute child method rest handler) }
 
 /--
 Adds a route from a runtime pattern string (e.g. `"/user/{id}"`).
 Useful for programmatic (non-macro) route construction.
 -/
-public def addRouteFromPattern (self : RouteTrie) (method : Method) (pattern : String) (handler : HandlerFn) : RouteTrie :=
+public def addRouteFromPattern {H : Type} (self : RouteTrie H) (method : Method) (pattern : String) (handler : H) : RouteTrie H :=
   let pat := RoutePattern.ofString pattern
   addRoute self method pat.segments handler
 
 /--
 Builds a trie from a list of `Route` values, composing route-level middlewares.
 -/
-public def ofRoutes (routes : List Route) : RouteTrie :=
+public def ofRoutes (routes : List Route) : RouteTrie HandlerFn :=
   routes.foldl (init := empty) fun self r =>
     let h := r.middlewares.foldl (fun f mw => mw f) r.handler
     self.addRoute r.method r.pat.segments h
@@ -81,8 +81,8 @@ The outcome of a lookup. `methodMismatch` carries the methods registered at the
 matched path, which is what an `Allow` header needs; it is distinct from
 `noMatch` so that a wrong method can be answered with 405 rather than 404.
 -/
-public inductive Lookup where
-  | found (params : List (String × String)) (handler : HandlerFn)
+public inductive Lookup (H : Type) where
+  | found (params : List (String × String)) (handler : H)
   | methodMismatch (allowed : List Method)
   | noMatch
 
@@ -91,7 +91,7 @@ Combines two lookups in priority order, so `literal <|> param <|> wildcard`
 keeps its meaning: any `found` wins, and a path that matched under some other
 method is only reported once every branch has failed to produce a handler.
 -/
-public def Lookup.orElse : Lookup → (Unit → Lookup) → Lookup
+public def Lookup.orElse {H : Type} : Lookup H → (Unit → Lookup H) → Lookup H
   | .found params h, _ => .found params h
   | .noMatch, k => k ()
   | .methodMismatch a, k =>
@@ -101,17 +101,17 @@ public def Lookup.orElse : Lookup → (Unit → Lookup) → Lookup
     | .noMatch => .methodMismatch a
 
 /-- Whether the lookup produced a handler. -/
-public def Lookup.isFound : Lookup → Bool
+public def Lookup.isFound {H : Type} : Lookup H → Bool
   | .found .. => true
   | _ => false
 
 /-- The handler and its captures, discarding why a lookup failed. -/
-public def Lookup.toOption : Lookup → Option (List (String × String) × HandlerFn)
+public def Lookup.toOption {H : Type} : Lookup H → Option (List (String × String) × H)
   | .found params handler => some (params, handler)
   | _ => none
 
 /-- The handlers stored at a node, as a `found` or a `methodMismatch`/`noMatch`. -/
-def handlerAt (t : RouteTrie) (method : Method) (params : List (String × String)) : Lookup :=
+def handlerAt {H : Type} (t : RouteTrie H) (method : Method) (params : List (String × String)) : Lookup H :=
   match t.handlers.get? method with
   | some h => .found params h
   | none =>
@@ -125,10 +125,10 @@ Looks up a handler by method and path segments. Priority: literal > param > wild
 Reports `found` with the captured parameters, `methodMismatch` with the methods
 the path does accept, or `noMatch`.
 -/
-public def lookup (self : RouteTrie) (method : Method) (segs : List String) : Lookup :=
+public def lookup {H : Type} (self : RouteTrie H) (method : Method) (segs : List String) : Lookup H :=
   go self segs []
 where
-  go (t : RouteTrie) (segs : List String) (params : List (String × String)) : Lookup :=
+  go (t : RouteTrie H) (segs : List String) (params : List (String × String)) : Lookup H :=
     match segs with
     -- leaf, do we have a handler ?
     | [] => handlerAt t method params
@@ -174,10 +174,10 @@ Example: given a trie containing
 
 (order is deterministic but insertion-dependent, not route-priority).
 -/
-public partial def fold (self : RouteTrie) (f : Method → List Segment → HandlerFn → α → α) (init : α) : α :=
+public partial def fold {H : Type} (self : RouteTrie H) (f : Method → List Segment → H → α → α) (init : α) : α :=
   foldGo f self [] init
 where
-  foldGo (f : Method → List Segment → HandlerFn → α → α) (t : RouteTrie) (revSegs : List Segment) (acc : α) : α :=
+  foldGo (f : Method → List Segment → H → α → α) (t : RouteTrie H) (revSegs : List Segment) (acc : α) : α :=
     let acc := HashMap.fold (fun acc m h => f m revSegs.reverse h acc) acc t.handlers
     let acc := HashMap.Raw.fold (fun acc s child => foldGo f child (Segment.lit s :: revSegs) acc) acc t.literals
     let acc := match t.param with | none => acc | some (name, child) => foldGo f child (Segment.param name :: revSegs) acc
@@ -205,7 +205,7 @@ The `HEAD` response carries `Content-Length: 0` rather than the length the body
 would have had: `Std.Http`'s writer has no `HEAD` awareness, so declaring a
 length it will not send would strand the client waiting for it.
 -/
-public def dispatch (self : RouteTrie) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
+public def dispatch (self : RouteTrie HandlerFn) (req : Request Body.Stream) : ContextAsync (Response Body.Any) := do
   let method := req.line.method
   let path := req.line.uri.path
   let segments := path.toDecodedSegments.toList
@@ -232,7 +232,7 @@ where
     (builder.header? "allow" (allowValue allowed) |>.getD builder) |>.empty
 
 /-- Makes `RouteTrie` usable as a `Std.Http.Server.Handler`. -/
-public instance : Handler RouteTrie where
+public instance : Handler (RouteTrie HandlerFn) where
   onRequest := dispatch
 
 end LeanIO.Router.RouteTrie

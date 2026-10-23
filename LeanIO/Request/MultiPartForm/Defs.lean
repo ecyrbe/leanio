@@ -10,6 +10,24 @@ public import LeanIO.Data.ChunkBuffer
 namespace LeanIO
 open Std.Http Std.Async Std.Slice
 
+/-- The body source the multipart parser reads from. Stock LeanIO instantiates it with
+`ContextAsync`/`Body.Stream`; the native backend with `VM`/`BodyReader`. -/
+public class BodySource (m : Type → Type) (body : Type) where
+  recv : body → m (Option ByteArray)
+
+/-- Read a reference in an arbitrary monad that can lift `IO`. -/
+public def refGet {m : Type → Type} [Monad m] [MonadLift IO m] {α : Type} (r : IO.Ref α) : m α :=
+  monadLift (r.get : IO α)
+
+/-- Write a reference in an arbitrary monad that can lift `IO`. -/
+public def refSet {m : Type → Type} [Monad m] [MonadLift IO m] {α : Type} (r : IO.Ref α) (a : α) : m Unit :=
+  monadLift (r.set a : IO Unit)
+
+/-- Modify a reference in an arbitrary monad that can lift `IO`. -/
+public def refModify {m : Type → Type} [Monad m] [MonadLift IO m] {α : Type} (r : IO.Ref α)
+    (f : α → α) : m Unit :=
+  monadLift (r.modify f : IO Unit)
+
 /--
 Parser lifecycle state for multipart form processing.
 -/
@@ -27,7 +45,7 @@ Internal mutable state shared across the multipart parsing pipeline.
 Tracks the buffered chunk data, cursor position, precompiled boundary
 search patterns, and the underlying HTTP body stream.
 -/
-public structure MultipartInner : Type where
+public structure MultipartInner (m : Type → Type := ContextAsync) (body : Type := Body.Stream) : Type where
 
   /--
   Buffered chunk data that accumulates socket reads.
@@ -57,7 +75,7 @@ public structure MultipartInner : Type where
   /--
   The underlying HTTP request body stream.
   -/
-  stream         : Body.Stream
+  stream         : body
 
   /--
   Current parser lifecycle state (`ready`, `inFile`, or `done`).
@@ -94,18 +112,18 @@ be streamed lazily via `stream`, `save`, `bytes`, or `discard`.
 - `contentType` — Content-Type (defaults to `text/plain` per RFC 2046 §5.1)
 - `headers` — all part headers as a `Std.Http.Headers` map
 -/
-public structure FormFile where
+public structure FormFile (m : Type → Type := ContextAsync) (body : Type := Body.Stream) where
   name        : String
   filename    : String
   contentType : String
   headers     : Headers
-  inner       : IO.Ref MultipartInner
+  inner       : IO.Ref (MultipartInner m body)
 
 /--
 One entry in a multipart form submission: either a simple form field
 or an uploaded file.
 -/
-public inductive MultipartEntry : Type where
+public inductive MultipartEntry (m : Type → Type := ContextAsync) (body : Type := Body.Stream) : Type where
 
   /--
   A simple form field with `name` and its string `value`.
@@ -115,7 +133,7 @@ public inductive MultipartEntry : Type where
   /--
   An uploaded file part containing metadata and a lazily-streamable body.
   -/
-  | file  (file : FormFile)
+  | file  (file : FormFile m body)
 
 /--
 Streaming multipart form parser. Consumes request body lazily — file
@@ -152,11 +170,18 @@ def router : Router :=
 | `file.bytes` | Read all chunks into a `ByteArray` (small files only) |
 | `file.discard` | Skip the body |
 -/
-public structure MultiPartForm where
+public structure MultiPartForm (m : Type → Type := ContextAsync) (body : Type := Body.Stream) where
 
   /--
   Shared mutable parser state.
   -/
-  inner : IO.Ref MultipartInner
+  inner : IO.Ref (MultipartInner m body)
+
+/-- The stock body source: `Body.Stream` read in `ContextAsync`. -/
+public instance : BodySource ContextAsync Body.Stream where
+  recv s := do
+    match ← s.recv with
+    | none => pure none
+    | some chunk => pure (some chunk.data)
 
 end LeanIO

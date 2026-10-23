@@ -11,12 +11,12 @@ def h2 : HandlerFn := fun _ => default
 def h3 : HandlerFn := fun _ => default
 def h4 : HandlerFn := fun _ => default
 
-def getCap (result : RouteTrie.Lookup) (key : String) : String :=
+def getCap (result : RouteTrie.Lookup HandlerFn) (key : String) : String :=
   match result with
   | .found vs _ => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
   | _ => ""
 
-def nCaps (result : RouteTrie.Lookup) : Nat :=
+def nCaps (result : RouteTrie.Lookup HandlerFn) : Nat :=
   match result with
   | .found vs _ => vs.length
   | _ => 0
@@ -26,13 +26,13 @@ namespace Tests.RouteTrie
 -- ==========================================
 -- empty trie returns none
 -- ==========================================
-#guard (RouteTrie.lookup RouteTrie.empty .get ["anything"]).toOption.isNone
-#guard (RouteTrie.lookup RouteTrie.empty .get []).toOption.isNone
+#guard (RouteTrie.lookup (RouteTrie.empty : RouteTrie HandlerFn) .get ["anything"]).toOption.isNone
+#guard (RouteTrie.lookup (RouteTrie.empty : RouteTrie HandlerFn) .get []).toOption.isNone
 
 -- ==========================================
 -- single literal route
 -- ==========================================
-def trie1 := RouteTrie.empty
+def trie1 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "todos"] h1
 
 #guard (RouteTrie.lookup trie1 .get ["todos"]).toOption.isSome
@@ -43,7 +43,7 @@ def trie1 := RouteTrie.empty
 -- ==========================================
 -- single param route
 -- ==========================================
-def trie2 := RouteTrie.empty
+def trie2 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.param "id"] h1
 
 #guard (RouteTrie.lookup trie2 .get ["42"]).toOption.isSome
@@ -55,7 +55,7 @@ def trie2 := RouteTrie.empty
 -- ==========================================
 -- literal + param in same route
 -- ==========================================
-def trie3 := RouteTrie.empty
+def trie3 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "user", Segment.param "id"] h1
 
 #guard (RouteTrie.lookup trie3 .get ["user", "42"]).toOption.isSome
@@ -67,7 +67,7 @@ def trie3 := RouteTrie.empty
 -- ==========================================
 -- multiple literals, no params
 -- ==========================================
-def trie4 := RouteTrie.empty
+def trie4 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "a", Segment.lit "b"] h1
   |>.addRoute .get [Segment.lit "a", Segment.lit "c"] h2
   |>.addRoute .get [Segment.lit "x"] h3
@@ -83,7 +83,7 @@ def trie4 := RouteTrie.empty
 -- ==========================================
 -- literal takes precedence over wildcard
 -- ==========================================
-def trie5 := RouteTrie.empty
+def trie5 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.param "id"] h1
   |>.addRoute .get [Segment.lit "settings"] h2
 
@@ -95,7 +95,7 @@ def trie5 := RouteTrie.empty
 -- ==========================================
 -- multiple methods at same path
 -- ==========================================
-def trie6 := RouteTrie.empty
+def trie6 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "items"] h1
   |>.addRoute .post [Segment.lit "items"] h2
 
@@ -108,7 +108,7 @@ def trie6 := RouteTrie.empty
 -- ==========================================
 -- full nested: /todos/{id}/comments/{cId}
 -- ==========================================
-def trie7 := RouteTrie.empty
+def trie7 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "todos", Segment.param "id", Segment.lit "comments", Segment.param "cId"] h1
 
 #guard (RouteTrie.lookup trie7 .get ["todos", "1", "comments", "42"]).toOption.isSome
@@ -120,7 +120,7 @@ def trie7 := RouteTrie.empty
 -- ==========================================
 -- root path (empty segments)
 -- ==========================================
-def trie8 := RouteTrie.empty
+def trie8 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [] h1
 
 #guard (RouteTrie.lookup trie8 .get []).toOption.isSome
@@ -130,7 +130,7 @@ def trie8 := RouteTrie.empty
 -- ==========================================
 -- addRouteFromPattern (runtime construction)
 -- ==========================================
-def trie9 := RouteTrie.empty
+def trie9 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRouteFromPattern .get "/users/{uid}/posts/{pid}" h1
 
 #guard (RouteTrie.lookup trie9 .get ["users", "10", "posts", "99"]).toOption.isSome
@@ -161,7 +161,7 @@ def trie10 := RouteTrie.ofRoutes
 -- ==========================================
 -- catchall ({*rest}) — lowest priority
 -- ==========================================
-def trie11 := RouteTrie.empty
+def trie11 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.rest "path"] h1
 
 #guard (RouteTrie.lookup trie11 .get ["anything"]).toOption.isSome
@@ -174,7 +174,7 @@ def trie11 := RouteTrie.empty
 -- ==========================================
 -- literal + catchall
 -- ==========================================
-def trie12 := RouteTrie.empty
+def trie12 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "files", Segment.rest "path"] h1
 
 #guard (RouteTrie.lookup trie12 .get ["files", "a", "b"]).toOption.isSome
@@ -187,7 +187,7 @@ def trie12 := RouteTrie.empty
 -- ==========================================
 -- literal > wildcard > catchall priority
 -- ==========================================
-def trie13 := RouteTrie.empty
+def trie13 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.rest "any"] h1
   |>.addRoute .get [Segment.param "id"] h2
   |>.addRoute .get [Segment.lit "settings"] h3
@@ -202,7 +202,7 @@ def trie13 := RouteTrie.empty
 -- ==========================================
 -- catchall via addRouteFromPattern
 -- ==========================================
-def trie14 := RouteTrie.empty
+def trie14 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRouteFromPattern .get "/static/{*rest}" h1
 
 #guard (RouteTrie.lookup trie14 .get ["static", "x", "y", "z"]).toOption.isSome
@@ -214,7 +214,7 @@ end Tests.RouteTrie
 -- ==========================================
 -- trailing slash
 -- ==========================================
-def trie15 := RouteTrie.empty
+def trie15 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "todos"] h1
   |>.addRoute .get [Segment.lit "todos", Segment.param "id"] h2
 
@@ -227,13 +227,13 @@ def trie15 := RouteTrie.empty
 -- ==========================================
 -- method mismatch vs no match
 -- ==========================================
-def allowedOf (r : RouteTrie.Lookup) : List Method :=
+def allowedOf (r : RouteTrie.Lookup HandlerFn) : List Method :=
   match r with | .methodMismatch ms => ms | _ => []
 
-def isNoMatch (r : RouteTrie.Lookup) : Bool :=
+def isNoMatch (r : RouteTrie.Lookup HandlerFn) : Bool :=
   match r with | .noMatch => true | _ => false
 
-def trie16 := RouteTrie.empty
+def trie16 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .get [Segment.lit "todos"] h1
   |>.addRoute .put [Segment.lit "todos"] h2
 
@@ -256,7 +256,7 @@ def trie16 := RouteTrie.empty
 #guard RouteTrie.allowValue [.get, .put] == "GET,PUT,HEAD"
 
 -- HEAD is served by GET only; a path with no GET still reports a mismatch
-def trie17 := RouteTrie.empty
+def trie17 := (RouteTrie.empty : RouteTrie HandlerFn)
   |>.addRoute .post [Segment.lit "submit"] h1
 
 #guard (allowedOf (RouteTrie.lookup trie17 .head ["submit"])).contains .post

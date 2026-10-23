@@ -94,12 +94,12 @@ wrap around, and the outermost router's middlewares run first.
 Own routes are inserted before sub-router routes; sub-router patterns get the
 mount prefix prepended. All composition happens here, once — never at dispatch.
 -/
-public partial def Router.toRouteTrie (self : Router) : RouteTrie :=
+public partial def Router.toRouteTrie (self : Router) : RouteTrie HandlerFn :=
   let wrap := applyMiddlewares self.middlewares
   let trie := self.routes.foldr (fun route acc =>
     let h := applyMiddlewares route.middlewares route.handler
     acc.addRoute route.method route.pat.segments (wrap h)
-  ) RouteTrie.empty
+  ) (RouteTrie.empty : RouteTrie HandlerFn)
   let trie := self.routers.foldr (fun (pre, sub) acc =>
     let preSegs := (RoutePattern.ofString pre).segments
     RouteTrie.fold (Router.toRouteTrie sub) (fun method segs handler acc =>
@@ -109,7 +109,7 @@ public partial def Router.toRouteTrie (self : Router) : RouteTrie :=
   { trie with notFound := self.notFound.map wrap }
 
 
-public instance : Coe Router RouteTrie where
+public instance : Coe Router (RouteTrie HandlerFn) where
   coe := Router.toRouteTrie
 
 /--

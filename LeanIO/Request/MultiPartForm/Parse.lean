@@ -7,12 +7,14 @@ public import Std.Http.Data.Headers
 public import Std.Async.ContextAsync
 import LeanIO.Data.Headers.MimeType
 public import LeanIO.Request.MultiPartForm.Defs
-import LeanIO.Request.MultiPartForm.Headers
-import LeanIO.Request.MultiPartForm.Stream
+public import LeanIO.Request.MultiPartForm.Headers
+public import LeanIO.Request.MultiPartForm.Stream
 
 namespace LeanIO
 open Std.Http Std.Async Std.Slice MimeType
 open Lean Elab Term
+
+variable {m : Type → Type} {body : Type} [Monad m] [MonadLift IO m] [BodySource m body]
 
 /-!
 Grammar for multipart/<any> content type:
@@ -46,14 +48,15 @@ public def generatedFilename (name : String) (counter : Nat) (mime : String) : S
 
 /-- Transition to `.inFile` and return a file entry. -/
 @[inline]
-public def fileEntry (inner : IO.Ref MultipartInner) (name fn : String) (contentType : String) (hds : Headers) : ContextAsync MultipartEntry := do
-  inner.modify fun s => { s with phase := .inFile }
+public def fileEntry (inner : IO.Ref (MultipartInner m body)) (name fn : String)
+    (contentType : String) (hds : Headers) : m (MultipartEntry m body) := do
+  refModify inner fun s => { s with phase := .inFile }
   return .file { name, filename := fn, contentType, headers := hds, inner }
 
 /-- Transition to `.done` and stop. -/
 @[inline]
-public def stop (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
-  inner.modify fun s => { s with phase := .done }
+public def stop (inner : IO.Ref (MultipartInner m body)) : m (Option (MultipartEntry m body)) := do
+  refModify inner fun s => { s with phase := .done }
   return none
 
 /--
@@ -64,15 +67,16 @@ Parse the next multipart entry from the stream.
 3. Parse headers
 4. text/* without filename → field; otherwise → file
 -/
-public def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option MultipartEntry) := do
-  let st ← inner.get
-  if st.pos = 0 && st.cb.size = 0 then
+public def parseNextEntry [Inhabited (m Unit)] [Inhabited (m (ChunkBuffer × Nat))]
+    (inner : IO.Ref (MultipartInner m body)) : m (Option (MultipartEntry m body)) := do
+  let st ← refGet inner
+  if st.pos = 0 then
     skip inner st.boundStart
   skip inner crlf
 
-  let st ← inner.get
+  let st ← refGet inner
   if st.cb.startsWithAt st.pos endMarker then
-    inner.modify fun s => { s with pos := s.pos + endMarker.size }
+    refModify inner fun s => { s with pos := s.pos + endMarker.size }
     return ← stop inner
 
   let headerBytes ← readUntil inner crlfcrlfSearch
@@ -88,7 +92,7 @@ public def parseNextEntry (inner : IO.Ref MultipartInner) : ContextAsync (Option
       return some (.field name ((String.fromUTF8? bodyBytes).getD ""))
     else
       let counter := st.nameCounter
-      inner.modify fun s => { s with nameCounter := s.nameCounter + 1 }
+      refModify inner fun s => { s with nameCounter := s.nameCounter + 1 }
       let filename := generatedFilename name counter contentType
       return some (← fileEntry inner name filename contentType hds)
 

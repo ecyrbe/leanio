@@ -66,7 +66,7 @@ def exceptOk [BEq α] (e : Except ε α) (v : α) : Bool :=
 def th : HandlerFn := fun _ => default
 def th2 : HandlerFn := fun _ => default
 
-def getCap' (result : RouteTrie.Lookup) (key : String) : String :=
+def getCap' (result : RouteTrie.Lookup HandlerFn) (key : String) : String :=
   match result with
   | .found vs _ => vs.find? (·.1 == key) |>.map (·.2) |>.getD ""
   | _ => ""
