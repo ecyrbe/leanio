@@ -66,11 +66,11 @@ def postComment := POST "/videos/{name}/comments"
   return (Status.created, comment)
 
 def index := GET "/" => do
-  return { path := staticDir / "index.html" : File }
+  return File.trusted (staticDir / "index.html")
 
 def serveStatic := GET "/{*rest}" (⟨_⟩ : Path String) (p : URI.Path) => do
   let decoded := String.intercalate "/" (p.toDecodedSegments.toList)
-  return { path := staticDir / decoded : RangeFile }
+  return RangeFile.under staticDir decoded
 
 public def main : IO Unit := Async.block do
   let apiRouter : Router := Router.empty

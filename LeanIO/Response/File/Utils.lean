@@ -33,4 +33,31 @@ public def sendFileStream (handle : IO.FS.Handle) (knownLen : Nat) (stream : Bod
   finally
     stream.close
 
+/--
+Whether `rest` can be joined onto a root directory without escaping it.
+
+Rejects absolute fragments, which discard the root entirely (`root / "/etc/passwd"`
+is `/etc/passwd`, reachable from one encoded slash), and `..` components, which
+neither `/` nor `FilePath.normalize` resolves. Symlinks inside the root are
+followed, matching `tower-http`'s `ServeDir`.
+-/
+public def isContainableFragment (rest : System.FilePath) : Bool :=
+  !rest.isAbsolute && !(rest.components.any (· == ".."))
+
+/-- `rest` joined beneath `root`, or `none` if it would escape. -/
+public def resolveUnder (root : System.FilePath) (rest : System.FilePath) :
+    Option System.FilePath :=
+  if isContainableFragment rest then some (root / rest) else none
+
+/--
+The path a `File`/`RangeFile` should open, or `none` if it must 404. Without a
+`root` there is no boundary to check against, so the rootless form refuses `..`
+but cannot tell a deliberate absolute `path` from an injected one.
+-/
+public def resolveServePath (root : Option System.FilePath) (path : System.FilePath) :
+    Option System.FilePath :=
+  match root with
+  | some r => resolveUnder r path
+  | none => if path.components.any (· == "..") then none else some path
+
 end LeanIO

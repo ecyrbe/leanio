@@ -13,11 +13,10 @@ def whoami := GET "/api/whoami" (⟨addr⟩ : RemoteAddr) => do
     return toString addr
 
 def index := GET "/" => do
-    return { path := staticDir / "index.html"
-             cacheControl := CacheControl.disabled : File }
+    return File.trusted (staticDir / "index.html") CacheControl.disabled
 
 def serveStatic := GET "/{*rest}" (⟨rest⟩ : Path String) => do
-    return { path := staticDir / rest : File }
+    return File.under staticDir rest
 
 public def main : IO Unit := Async.block do
   let router : Router := Router.empty

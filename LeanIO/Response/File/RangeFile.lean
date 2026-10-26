@@ -23,16 +23,40 @@ range requests, or the full file otherwise.
 `IntoResponse` is implemented with streaming and `Content-Length` framing
 (not chunked transfer encoding).
 
+Use `RangeFile.under` for request input; joining it onto a directory by hand
+potentially introduces a security vulnerability.
+
 ```lean
 def serveFile := GET "/static/{*rest}" (⟨rest⟩ : Path String) => do
-  return { path := "static" / rest : RangeFile }
+  return RangeFile.under "static" rest
 ```
 -/
 public structure RangeFile where
-  new ::
+  private mk ::
   path         : System.FilePath
-  cacheControl : Option CacheControl := some <| .publicStatic 0
+  /-- Directory `path` must stay inside, when it came from a client. -/
+  root         : Option System.FilePath
+  cacheControl : Option CacheControl
 deriving Inhabited
+
+/-- A `RangeFile` serving `rest` from inside `root`. Use this for request input. -/
+public def RangeFile.under (root rest : System.FilePath)
+    (cacheControl : Option CacheControl := some <| .publicStatic 0) : RangeFile :=
+  .mk rest (some root) cacheControl
+
+/--
+A `RangeFile` serving `path` as given, with no containment check.
+
+Only for a path the program chose itself. Passing request input here reintroduces
+the traversal `RangeFile.under` exists to prevent.
+-/
+public def RangeFile.trusted (path : System.FilePath)
+    (cacheControl : Option CacheControl := some <| .publicStatic 0) : RangeFile :=
+  .mk path none cacheControl
+
+/-- Replaces the cache directives on an existing `RangeFile`, leaving its path unchanged. -/
+public def RangeFile.withCacheControl (cacheControl : Option CacheControl) (self : RangeFile) : RangeFile :=
+  .mk self.path self.root cacheControl
 
 public def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (Nat × Nat) :=
   match ranges with
@@ -58,10 +82,12 @@ public def pickRange (ranges : Option (Array Range)) (fileSize : Nat) : Option (
 public instance : IntoResponseExt RangeFile where
   into_response_ext req f := do
     let file ← f
-    if !(←file.path.pathExists) || (←file.path.isDir) then
+    let some path := resolveServePath file.root file.path
+      | Response.notFound |>.empty
+    if !(←path.pathExists) || (←path.isDir) then
       Response.notFound |>.empty
     else
-      let mdata ← file.path.metadata
+      let mdata ← path.metadata
       let fileSize := mdata.byteSize.toNat
       match file.cacheControl with
       | some cacheControl =>
@@ -69,10 +95,10 @@ public instance : IntoResponseExt RangeFile where
         if etagMatches req etag then
           Response.new |>.status Status.notModified |>.empty
         else
-          let handle ← IO.FS.Handle.mk file.path .read
+          let handle ← IO.FS.Handle.mk path .read
           let ranges := req.line.headers.get? .range |>.bind (parseRange ·.value)
           let baseResp := Response.ok
-            |>.header .contentType (MimeType.mimeType file.path)
+            |>.header .contentType (MimeType.mimeType path)
             |>.header .acceptRanges headerBytes
             |>.header .etag etag
             |>.header .cacheControl cacheControl
@@ -92,10 +118,10 @@ public instance : IntoResponseExt RangeFile where
                 |>.header! "content-range" s!"bytes {start}-{endByte}/{mdata.byteSize}"
                 |>.stream (sendFileStream handle len)
       | none =>
-          let handle ← IO.FS.Handle.mk file.path .read
+          let handle ← IO.FS.Handle.mk path .read
           let ranges := req.line.headers.get? .range |>.bind (parseRange ·.value)
           let baseResp := Response.ok
-            |>.header .contentType (MimeType.mimeType file.path)
+            |>.header .contentType (MimeType.mimeType path)
             |>.header .acceptRanges headerBytes
           match pickRange ranges fileSize with
           | none =>
